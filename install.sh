@@ -64,7 +64,7 @@ preflight() {
 install_base_packages() {
   say "Installing basic tools and automatic security updates"
   apt-get update -qq
-  apt_install ca-certificates curl gnupg jq smartmontools unattended-upgrades xz-utils ufw
+  apt_install ca-certificates curl gnupg jq smartmontools parted rsync unattended-upgrades xz-utils ufw
   cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";

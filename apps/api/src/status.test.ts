@@ -77,4 +77,16 @@ describe('computeStatus', () => {
   it('ignores an old failure once the service is running', () => {
     expect(computeStatus(input({ lastFailure: 'old' })).status).toBe('online');
   });
+
+  it('is an error when a running service has lost its drive, and names what is missing', () => {
+    const result = computeStatus(input({ missingFolders: ['movies', 'home-videos'] }));
+    expect(result.status).toBe('error');
+    expect(result.message).toContain('movies and home videos');
+  });
+
+  it('leaves a stopped service alone when its drive is missing', () => {
+    expect(
+      computeStatus(input({ containerState: 'stopped', missingFolders: ['movies'] })).status,
+    ).toBe('offline');
+  });
 });

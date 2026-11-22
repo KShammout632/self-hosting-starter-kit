@@ -1,5 +1,73 @@
 import type { Page, Route } from '@playwright/test';
-import type { ServiceSummary, SessionInfo, StatusSnapshot } from '@selfhost/shared';
+import {
+  LIBRARY_FOLDERS,
+  type DiskInfo,
+  type FolderUsageResult,
+  type ServiceSummary,
+  type SessionInfo,
+  type SmartResult,
+  type StatusSnapshot,
+  type StorageSnapshot,
+  type VolumeInfo,
+} from '@selfhost/shared';
+
+export const volume = (overrides: Partial<VolumeInfo> = {}): VolumeInfo => ({
+  partition: 'sdb1',
+  uuid: '22222222-2222-4222-8222-222222222222',
+  fsLabel: 'Media',
+  filesystem: 'ext4',
+  sizeBytes: 2 * 1024 ** 4,
+  usedBytes: 400 * 1024 ** 3,
+  freeBytes: 1600 * 1024 ** 3,
+  mountLabel: null,
+  mounted: false,
+  configured: false,
+  mountable: true,
+  keepsPermissions: true,
+  nearlyFull: false,
+  ...overrides,
+});
+
+export const usbDisk = (volumes: VolumeInfo[] = [volume()]): DiskInfo => ({
+  device: 'sdb',
+  model: 'Portable USB Drive',
+  sizeBytes: 2 * 1024 ** 4,
+  transport: 'usb',
+  removable: false,
+  isSystem: false,
+  canFormat: volumes.every((v) => !v.mounted),
+  volumes,
+});
+
+export const systemDisk = (): DiskInfo => ({
+  device: 'sda',
+  model: 'Internal SSD',
+  sizeBytes: 256 * 1024 ** 3,
+  transport: 'sata',
+  removable: false,
+  isSystem: true,
+  canFormat: false,
+  volumes: [],
+});
+
+const folderUsage = (folder: (typeof LIBRARY_FOLDERS)[number]): FolderUsageResult => ({
+  folder,
+  path: '/srv/' + folder,
+  mapped: null,
+  volumeMissing: false,
+  hasLocalFiles: false,
+  usedBytes: null,
+  freeBytes: null,
+  totalBytes: null,
+  nearlyFull: false,
+});
+
+export const newStorage = (disks: DiskInfo[] = [systemDisk(), usbDisk()]): StorageSnapshot => ({
+  disks,
+  missing: [],
+  folders: LIBRARY_FOLDERS.map(folderUsage),
+  job: null,
+});
 
 export const jellyfin = (overrides: Partial<ServiceSummary> = {}): ServiceSummary => ({
   name: 'jellyfin',
@@ -23,6 +91,8 @@ export interface MockState {
   requests: { method: string; path: string; body: unknown }[];
   reauthNeeded: boolean;
   failNextAction: { status: number; error: string; message: string } | null;
+  storage: StorageSnapshot;
+  smart: SmartResult;
 }
 
 export function newState(overrides: Partial<MockState> = {}): MockState {
@@ -34,6 +104,15 @@ export function newState(overrides: Partial<MockState> = {}): MockState {
     requests: [],
     reauthNeeded: false,
     failNextAction: null,
+    storage: newStorage(),
+    smart: {
+      supported: true,
+      passed: true,
+      temperatureCelsius: 36,
+      reallocatedSectors: 0,
+      powerOnHours: 900,
+      warnings: [],
+    },
     ...overrides,
   };
 }
@@ -109,6 +188,57 @@ export async function mockApi(page: Page, state: MockState) {
 
     if (path === '/api/services') return json(route, 200, snapshot(state));
     if (path === '/api/status/stream') return events(route, [['status', snapshot(state)]]);
+
+    if (path === '/api/storage') return json(route, 200, state.storage);
+
+    const smart = /^\/api\/disks\/[^/]+\/smart$/.exec(path);
+    if (smart) return json(route, 200, state.smart);
+
+    const diskAction = /^\/api\/disks\/([^/]+)\/(mount|unmount)$/.exec(path);
+    if (diskAction && method === 'POST') {
+      const [, uuid, kind] = diskAction;
+      if (state.failNextAction) {
+        const failure = state.failNextAction;
+        state.failNextAction = null;
+        return json(route, failure.status, { error: failure.error, message: failure.message });
+      }
+      for (const disk of state.storage.disks) {
+        for (const item of disk.volumes) {
+          if (item.uuid !== uuid) continue;
+          if (kind === 'mount') {
+            Object.assign(item, { mounted: true, configured: true, mountLabel: body.label });
+            disk.canFormat = false;
+          } else {
+            Object.assign(item, { mounted: false });
+            disk.canFormat = true;
+          }
+        }
+      }
+      return json(route, 200, { ok: true });
+    }
+
+    if (/^\/api\/disks\/by-device\/[a-z0-9]+\/format$/.test(path) && method === 'POST') {
+      if (state.reauthNeeded) {
+        return json(route, 403, {
+          error: 'reauth_required',
+          message: 'Enter your password to continue.',
+        });
+      }
+      state.storage.job = { kind: 'formatting', target: 'sdb', state: 'running', message: null };
+      return json(route, 202, { started: true });
+    }
+
+    const assign = /^\/api\/folders\/([a-z-]+)\/assign$/.exec(path);
+    if (assign && method === 'POST') {
+      const entry = state.storage.folders.find((f) => f.folder === assign[1]);
+      if (entry) entry.mapped = { mountLabel: 'media1', subpath: body.subpath };
+      return json(route, 202, { started: true });
+    }
+
+    if (path === '/api/storage/job/dismiss') {
+      state.storage.job = null;
+      return json(route, 200, { ok: true });
+    }
 
     const logs = /^\/api\/services\/[a-z]+\/logs$/.exec(path);
     if (logs) {

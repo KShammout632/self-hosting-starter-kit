@@ -1,7 +1,7 @@
 import {
   confirmBinding,
+  lockKey as lockKeyFor,
   parseRequest,
-  serviceLockKey,
   type AgentRequest,
   type AgentResponse,
   type ErrorCode,
@@ -34,7 +34,7 @@ export function createDispatcher({
   deps,
   log = (entry) => console.error(JSON.stringify(entry)),
 }: DispatchOptions): Dispatch {
-  // One mutating action per service at a time.
+  // One mutating action per service at a time, and one disk change at a time.
   const busyServices = new Set<string>();
 
   async function* execute(
@@ -63,7 +63,7 @@ export function createDispatcher({
 
     const { request } = parsed;
     const started = Date.now();
-    const lockKey = serviceLockKey(request);
+    const lockKey = lockKeyFor(request);
     const service = 'service' in request ? request.service : undefined;
     let outcome = 'ok';
     let holdsLock = false;

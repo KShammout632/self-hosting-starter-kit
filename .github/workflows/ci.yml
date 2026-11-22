@@ -112,3 +112,25 @@ jobs:
           path: apps/web/test-results
       - name: Restart, reset password, uninstall
         run: sudo bash /tmp/bundle/m2-gate-inner.sh finish
+
+  # M3 exit gate: installs the kit and runs the storage flow on a virtual disk (scsi_debug), including
+  # a simulated unplug and replug. The reboot part of the gate needs a real VM, see PROGRESS.md.
+  storage-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The runner's kernel may not offer scsi_debug. Remove this line once the job is known to pass.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: bash scripts/make-bundle.sh /tmp/bundle
+      - run: cp test/vm/m3-gate-inner.sh test/vm/agent-call.mjs /tmp/bundle/
+      - name: Prepare, mount, map, unmount and unplug a disk
+        run: sudo bash /tmp/bundle/m3-gate-inner.sh run /tmp/bundle

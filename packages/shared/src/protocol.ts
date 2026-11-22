@@ -11,6 +11,9 @@ export const ERROR_CODES = [
   'busy',
   'docker_unavailable',
   'not_installed',
+  'not_found',
+  'in_use',
+  'refused',
   'failed',
 ] as const;
 export const errorCode = z.enum(ERROR_CODES);

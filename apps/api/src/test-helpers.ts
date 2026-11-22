@@ -20,6 +20,9 @@ export interface FakeAgent extends AgentClient {
   logLines: string[];
   unreachable: boolean;
   httpOk: boolean;
+  missingFolders: string[];
+  disks: unknown[];
+  mappedFolders: Record<string, { mountLabel: string; subpath: string }>;
 }
 
 export function createFakeAgent(): FakeAgent {
@@ -31,6 +34,9 @@ export function createFakeAgent(): FakeAgent {
     logLines: [],
     unreachable: false,
     httpOk: true,
+    missingFolders: [],
+    disks: [],
+    mappedFolders: {},
     async call(request) {
       if (agent.unreachable) throw new AgentRequestError('unreachable', 'down');
       agent.calls.push(request);
@@ -39,6 +45,7 @@ export function createFakeAgent(): FakeAgent {
           service: 'jellyfin',
           state: agent.serviceState,
           http: agent.serviceState === 'running' ? { ok: agent.httpOk } : null,
+          missingFolders: agent.missingFolders,
           containers:
             agent.serviceState === 'not_found'
               ? []
@@ -66,6 +73,21 @@ export function createFakeAgent(): FakeAgent {
           diskTotalBytes: 500e9,
           diskFreeBytes: 400e9,
           temperatureCelsius: null,
+        } as never;
+      }
+      if (request.action === 'disk.list') return { disks: agent.disks, missing: [] } as never;
+      if (request.action === 'folder.usage') {
+        const mapped = agent.mappedFolders[request.folder] ?? null;
+        return {
+          folder: request.folder,
+          path: `/srv/${request.folder}`,
+          mapped,
+          volumeMissing: false,
+          hasLocalFiles: false,
+          usedBytes: null,
+          freeBytes: null,
+          totalBytes: null,
+          nearlyFull: false,
         } as never;
       }
       if (request.action === 'confirm.issue') {

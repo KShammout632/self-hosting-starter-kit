@@ -9,14 +9,14 @@ Each session updates this file before opening its pull request. Newest entry fir
 | M0 Foundations | Done, exit gate passed in CI (`agent-gate`) | `m0-foundations` |
 | M1 First slice: installer + Jellyfin | Done, exit gate passed in CI (`install-gate`) | `m1-installer-jellyfin` |
 | M2 Dashboard core | Done, exit gate passed in CI (`dashboard-gate`) | `m2-dashboard-core` |
-| M3 Storage | Not started | |
+| M3 Storage | Built and tested in unit, API and UI tests; exit gate (USB unplug and reboot) not yet run | `m3-storage` |
 | M4 All services, wizard, remote access | Not started | |
 | M5 Updates and docs | Not started | |
 | M6 Beta to 1.0 | Not started | |
 
 ## Next up
 
-Start M3 (storage).
+Run the M3 exit gate by hand in the VirtualBox VM (see the M3 entry below), then start M4.
 
 ## Later
 
@@ -30,11 +30,18 @@ Ideas and follow-ups found during work that are outside the current milestone.
 - Settings page (change password, kit and system updates, reboot, audit log) is M5. The M2 dashboard has no change-password screen; `sudo selfhost reset-password` is the only way to change it.
 - Install progress shows "Installing..." with a spinner, not an image pull percentage. The agent would need to stream pull progress.
 - The Open button links to `http://<address you used>:<port>`. HTTPS remote URLs and QR codes arrive with Tailscale in M4.
-- The "missing mounted folder" Error state needs the storage model from M3.
 - A failed install or start is remembered only in memory, so a dashboard restart clears the red card. The audit log keeps the history.
 - The dashboard image is built on the server during install (it runs `npm install` for two native modules). A release workflow could publish a prebuilt image instead, which would also pin it by digest.
 - `test/vm/m2-gate-inner.sh` has no Multipass wrapper. The browser part of the gate runs in CI only.
 - Setup is a single page (code and password). The multi-step wizard (Tailscale, drives, services) is M4 and should reuse it.
+
+- Storage: copying files into a new drive (`copyExisting`) uses `rsync` with no progress bar, and the original files stay on the system drive underneath the new mount. Streaming progress and offering to free the old copy are still to do.
+- Storage: a drive that was unmounted from the dashboard mounts again at the next boot, because its unit stays enabled. There is no "forget this drive" action yet.
+- Storage: services stopped by "Stop apps and unmount" are not started again. Folder changes do restart them.
+- Storage: after a drive comes back, a container that was running keeps its old view of the folder until it is restarted. The card says so ("restart this service"), nothing restarts it automatically.
+- Storage: `disk.format` is addressed by kernel name (`sdb`), which can change if a drive is replugged between the dialog and the click. The agent re-checks the disk is not mounted and not the system disk, but not that it is the same physical disk. Adding the serial number to the confirmation would close this.
+- Storage: no SMART warning is shown on the Home page, only when the owner presses Check health.
+- Storage: the filesystem check (`fsck`) for dirty NTFS and exFAT drives is not offered. A drive that will not mount says to check it on Windows.
 
 ## Session log
 
@@ -48,6 +55,13 @@ Template for each entry:
 - Known issues:
 - Next:
 -->
+
+### 2026-11-22: M3 Storage
+- Built: agent actions `disk.list` (from `lsblk --json`, with the system disk flagged, free space and a 90 percent warning, and set-up drives that are not plugged in reported as missing), `disk.mount` and `disk.unmount` (systemd mount units named by path, by UUID, `nofail`, `WantedBy=multi-user.target`; ext4, NTFS through `ntfs3` and exFAT, with `uid`, `gid` and `umask` options for the two Windows formats), `disk.format` (wipefs, GPT with one partition, `mkfs.ext4`, mount, standard folders), `disk.smart` (`smartctl --json`, with a retry in SAT mode for USB bridges), `folder.assign` (a bind mount unit with `BindsTo` on the drive, optional `rsync` of existing files) and `folder.usage`. `service.status` now returns `missingFolders`, and the dashboard turns that into the Error state for a running service. The API has `GET /api/storage`, mount, unmount, format, SMART and folder endpoints, with format and copy running in the background and reported as a job. The web app has a Storage page: drives with space and health, set up, unmount ("Safe to unplug"), erase and prepare, and the library folder mapping. The installer now also installs `parted` and `rsync`. `test/vm/m3-gate-inner.sh` and a `storage-gate` CI job.
+- Decisions made (and why): `disk.format` takes a device name (`sdb`, `nvme0n1`) instead of a filesystem UUID, because a blank disk has none; the schema allows only whole-disk kernel names and the agent checks the name against `lsblk` and refuses the system disk and any mounted disk. The confirm token is bound to the device name, and the dashboard asks the owner to type that name, plus password re-entry after 15 minutes. All disk and folder changes share one agent lock. The agent refuses to change a drive or folder while a service that uses it is running; the dashboard offers "Stop apps and unmount" and stops and restarts services itself. Only mount units carrying a marker comment are ever read or changed, so units the owner wrote by hand are left alone. A folder is never mapped over existing files unless the owner chooses to copy them. New drives are limited to 16 character names because of the ext4 label limit.
+- Not tested / needs the owner to check: all unit, API and UI tests pass (170 unit and integration, 30 Playwright), but none of them touch a real disk. The agent has only been exercised against fake `lsblk`, `systemctl` and `smartctl` output. Still to verify on a real machine: that a mount unit with `Options=nofail` does not block boot with the drive missing, that `BindsTo` stops the folder mount when a USB drive is pulled, that a folder name with a space works in a mount unit, NTFS and exFAT drives with the `ntfs3` and `exfat` kernel drivers, and SMART through a real USB bridge. The `storage-gate` CI job is set to `continue-on-error` because the GitHub runner kernel may not offer `scsi_debug`; remove that once it passes. The exit gate itself (USB unplug and reboot) needs the VirtualBox VM: add a second blank virtual disk (SATA, hot-pluggable), then run `GATE_DISK=sdb GATE_KEEP=1 GATE_HOTUNPLUG=1 sudo -E bash m3-gate-inner.sh run <bundle>` (this erases the disk), power off and remove the disk, boot and run `after-reboot-missing`, power off and attach the disk, boot and run `after-reboot-present`.
+- Known issues: see the Storage items under Later.
+- Next: run the gate by hand, then M4.
 
 ### 2026-11-22: M2 Dashboard core
 - Built: the dashboard API (`apps/api`, Fastify): setup code and one admin account (argon2id), login with a 7 day session cookie, CSRF token on every change, lockout after 10 wrong passwords, password re-entry after 15 minutes for uninstall, an audit table in SQLite, and service endpoints. Install, start, stop, restart, update and uninstall run in the background and the page follows them over Server-Sent Events (`/api/status/stream`). A poller refreshes every 15 seconds and works out Online, Starting, Having problems, Offline, Error or Not installed. Live logs stream over SSE (`/api/services/:name/logs?follow=1`), with a download endpoint. An error detector counts problem lines and maps known ones to plain-English hints (`packages/shared/src/logs.ts`). The web app (`apps/web`, React, Tailwind, shadcn style components, TanStack Query): setup, sign in, Home with server health and service cards, and a service page with actions, getting-started tips, suggestions and a live log viewer. Agent changes: `confirm.issue` (the agent issues and verifies confirm tokens), `logs.stream` with `follow`, container start times and the health URL check in `service.status`, and `system.info` on `systeminformation` (CPU load, disk, temperature). Installer: builds and starts the dashboard container, prints a setup code once, `selfhost reset-password`, and `uninstall.sh` removes the dashboard. 108 unit and integration tests, 14 Playwright UI tests, and the `dashboard-gate` CI job.

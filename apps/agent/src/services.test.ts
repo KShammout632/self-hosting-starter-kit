@@ -12,6 +12,8 @@ const paths: Paths = {
   servicesDir: '/opt/selfhost/services',
   configDir: '/opt/selfhost/config',
   renderDevice: '/dev/dri/renderD128',
+  unitDir: '/etc/systemd/system',
+  mountRoot: '/mnt',
 };
 const COMPOSE = '/opt/selfhost/services/jellyfin/compose.yml';
 
@@ -40,6 +42,18 @@ function makeHost(
     async gidOf(path) {
       return path === paths.renderDevice ? (options.renderGid ?? null) : null;
     },
+    async readFile(path) {
+      return files.get(path) ?? null;
+    },
+    async removeFile(path) {
+      files.delete(path);
+    },
+    async listDir(path) {
+      return [...files.keys()]
+        .filter((key) => key.startsWith(path + '/'))
+        .map((key) => key.slice(path.length + 1).split('/')[0]!);
+    },
+    async setOwner() {},
   };
 
   const run: Deps['run'] = async (file, args) => {

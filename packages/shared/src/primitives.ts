@@ -24,10 +24,25 @@ export const LIBRARY_FOLDER_PATHS: Record<LibraryFolder, string> = {
   nextcloud: '/srv/nextcloud',
 };
 
+export const LIBRARY_FOLDER_LABELS: Record<LibraryFolder, string> = {
+  movies: 'Movies',
+  tv: 'TV shows',
+  'home-videos': 'Home videos',
+  music: 'Music',
+  photos: 'Photos',
+  nextcloud: 'Nextcloud files',
+};
+
 export const requestId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 // Filesystem UUIDs are not always RFC 4122: ext4 uses one, NTFS uses 16 hex digits, exFAT uses "ABCD-1234".
 export const filesystemUuid = z.string().regex(/^[A-Za-z0-9-]{4,40}$/);
+
+// A whole disk as the kernel names it (sdb, nvme0n1, vdb). A blank disk has no filesystem UUID, so
+// formatting is addressed by device name. The agent checks the name against lsblk before doing anything.
+export const deviceName = z
+  .string()
+  .regex(/^(sd[a-z]{1,2}|vd[a-z]{1,2}|nvme\d{1,2}n\d{1,2}|mmcblk\d{1,2})$/);
 
 // Becomes /mnt/<label> and a systemd unit name, so keep it to a safe subset.
 export const volumeLabel = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/);
@@ -42,7 +57,7 @@ export const folderSubpath = z
 export const CONFIRM_KINDS = ['service.uninstall', 'disk.format'] as const;
 export const confirmKind = z.enum(CONFIRM_KINDS);
 export type ConfirmKind = z.infer<typeof confirmKind>;
-// A service name or a filesystem UUID, checked against the kind by the agent.
+// A service name or a device name, checked against the kind by the agent.
 export const confirmTarget = z.string().regex(/^[A-Za-z0-9-]{2,40}$/);
 
 export const confirmToken = z.string().regex(/^[A-Za-z0-9_-]{32,128}$/);

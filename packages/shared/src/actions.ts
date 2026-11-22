@@ -3,6 +3,7 @@ import {
   confirmKind,
   confirmTarget,
   confirmToken,
+  deviceName,
   filesystemUuid,
   folderSubpath,
   kitVersion,
@@ -41,13 +42,18 @@ export const agentRequest = z.discriminatedUnion('action', [
   action('disk.mount', { uuid: filesystemUuid, label: volumeLabel }),
   action('disk.unmount', { uuid: filesystemUuid }),
   action('disk.format', {
-    uuid: filesystemUuid,
+    device: deviceName,
     label: volumeLabel,
     confirm: confirmToken.optional(),
   }),
   action('disk.smart', { uuid: filesystemUuid }),
 
-  action('folder.assign', { folder: libraryFolder, uuid: filesystemUuid, subpath: folderSubpath }),
+  action('folder.assign', {
+    folder: libraryFolder,
+    uuid: filesystemUuid,
+    subpath: folderSubpath,
+    copyExisting: z.boolean().default(false),
+  }),
   action('folder.usage', { folder: libraryFolder }),
 
   action('tailscale.status', {}),
@@ -95,6 +101,19 @@ export function serviceLockKey(request: AgentRequest): ServiceLockKey | null {
 }
 type ServiceLockKey = z.infer<typeof serviceName>;
 
+// Disk and folder changes all go through one lock, because they edit the same mount units.
+const STORAGE_LOCKED_ACTIONS: ReadonlySet<AgentAction> = new Set([
+  'disk.mount',
+  'disk.unmount',
+  'disk.format',
+  'folder.assign',
+]);
+
+export function lockKey(request: AgentRequest): string | null {
+  if (STORAGE_LOCKED_ACTIONS.has(request.action)) return 'storage';
+  return serviceLockKey(request);
+}
+
 export interface ConfirmBinding {
   kind: ConfirmKind;
   target: string;
@@ -102,7 +121,7 @@ export interface ConfirmBinding {
 
 // A confirm token is only good for the one action and target it was issued for.
 export function confirmBinding(request: AgentRequest): ConfirmBinding | null {
-  if (request.action === 'disk.format') return { kind: 'disk.format', target: request.uuid };
+  if (request.action === 'disk.format') return { kind: 'disk.format', target: request.device };
   if (request.action === 'service.uninstall' && request.deleteData) {
     return { kind: 'service.uninstall', target: request.service };
   }

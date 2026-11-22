@@ -1,4 +1,10 @@
-import type { ServiceName, SystemInfoResult } from './index';
+import type {
+  DiskInfo,
+  FolderUsageResult,
+  MissingDrive,
+  ServiceName,
+  SystemInfoResult,
+} from './index';
 
 export const SERVICE_STATUSES = [
   'not_installed',
@@ -64,4 +70,18 @@ export interface ApiErrorBody {
   error: string;
   message: string;
   retryAfterSeconds?: number;
+}
+
+export interface StorageJob {
+  kind: 'formatting' | 'copying';
+  target: string;
+  state: 'running' | 'failed';
+  message: string | null;
+}
+
+export interface StorageSnapshot {
+  disks: DiskInfo[];
+  missing: MissingDrive[];
+  folders: FolderUsageResult[];
+  job: StorageJob | null;
 }

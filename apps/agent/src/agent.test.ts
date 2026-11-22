@@ -159,7 +159,7 @@ describe('dispatcher', () => {
 
   it('requires a confirm token for destructive actions', async () => {
     const [reply] = await collect(
-      dispatcher()(line({ id: 'a', action: 'disk.format', uuid: 'ABCD-1234', label: 'media1' })),
+      dispatcher()(line({ id: 'a', action: 'disk.format', device: 'sdb', label: 'media1' })),
     );
     expect(reply).toMatchObject({ ok: false, error: { code: 'confirm_required' } });
   });
