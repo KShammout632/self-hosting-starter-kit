@@ -41,6 +41,8 @@ install)
   grep -q "Setup code:" /tmp/install-output-2.txt && fail "a second install printed a different setup code"
   printf '%s\n' "$code" >"$CODE_FILE"
 
+  container=selfhost-dashboard-dashboard-1
+
   step "The dashboard answers and refuses strangers"
   [ "$(http_code "$DASHBOARD/api/health")" = "200" ] || fail "health check failed"
   [ "$(curl -fsS "$DASHBOARD/api/session" | jq -r .state)" = "setup_required" ] || fail "expected the setup page"
@@ -50,8 +52,16 @@ install)
   curl -fsS "$DASHBOARD/" | grep -q '<div id="root">' || fail "the web app is not the dashboard"
   [ "$(http_code "$DASHBOARD/services/jellyfin")" = "200" ] || fail "deep links to the web app do not work"
 
+  step "The dashboard can reach the agent, even after the agent restarts"
+  can_reach_agent() {
+    docker exec "$container" node -e "require('net').connect('/run/selfhost/agent.sock').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+  }
+  can_reach_agent || fail "the dashboard cannot reach the agent socket"
+  systemctl restart selfhost-agent.service
+  for _ in $(seq 1 20); do can_reach_agent && break; sleep 0.5; done
+  can_reach_agent || fail "the dashboard lost the agent socket after the agent restarted"
+
   step "The dashboard container is locked down"
-  container=selfhost-dashboard-dashboard-1
   [ "$(docker exec "$container" id -u)" != "0" ] || fail "the dashboard runs as root"
   docker inspect "$container" --format '{{json .Mounts}}' | grep -q docker.sock && fail "the dashboard can see the Docker socket"
   docker inspect "$container" --format '{{json .Mounts}}' | grep -q '/run/selfhost' || fail "the agent socket is not mounted"
