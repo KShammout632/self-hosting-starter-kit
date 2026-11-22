@@ -28,8 +28,10 @@ die() {
 
 # The setup code is printed on the original terminal only (fd 3), so it never lands in the log file.
 exec 3>&1
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Created first: tee creates the file in the background, so chmod right after could run before it exists.
+touch "$LOG_FILE"
 chmod 0600 "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
 trap 'printf "\nSomething went wrong. The full log is in %s\n" "$LOG_FILE" >&2' ERR
 
 export DEBIAN_FRONTEND=noninteractive
