@@ -139,7 +139,15 @@ reply="$(call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"label\":\"$L
 echo "$reply" | ok || fail "disk.format failed: $reply"
 UUID="$(echo "$reply" | jq -r .data.uuid)"
 save_state
-mountpoint -q "/mnt/$LABEL" || fail "/mnt/$LABEL is not mounted"
+if ! wait_for 15 "/mnt/$LABEL to be mounted" mountpoint -q "/mnt/$LABEL"; then :; fi
+mountpoint -q "/mnt/$LABEL" || {
+  systemctl status "$(unit_name "/mnt/$LABEL")" --no-pager || true
+  journalctl -u "$(unit_name "/mnt/$LABEL")" --no-pager -n 30 || true
+  cat "/etc/systemd/system/$(unit_name "/mnt/$LABEL")" || true
+  lsblk -o NAME,TYPE,FSTYPE,UUID,MOUNTPOINTS || true
+  findmnt -R /mnt || true
+  fail "/mnt/$LABEL is not mounted"
+}
 [ "$(stat -c %U "/mnt/$LABEL")" = selfhost ] || fail "/mnt/$LABEL is not owned by selfhost"
 for folder in Movies TV Music Photos; do [ -d "/mnt/$LABEL/$folder" ] || fail "missing /mnt/$LABEL/$folder"; done
 grep -q '^Options=nofail' "/etc/systemd/system/$(unit_name "/mnt/$LABEL")" || fail "the mount unit lacks nofail"
