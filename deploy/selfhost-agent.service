@@ -1,0 +1,16 @@
+[Unit]
+Description=Self-hosting starter kit host agent
+After=docker.service
+Wants=docker.service
+
+[Service]
+ExecStart=/opt/selfhost/agent/node /opt/selfhost/agent/agent.cjs
+Restart=always
+RestartSec=2
+# Creates /run/selfhost. The socket inside is root:selfhost 0660, set by the agent.
+RuntimeDirectory=selfhost
+RuntimeDirectoryMode=0755
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
