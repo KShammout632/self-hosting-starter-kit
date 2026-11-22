@@ -19,8 +19,20 @@ LABEL=gate1
 VIRTUAL=0
 
 step() { printf '\n##### %s\n' "$*"; }
+diagnose() {
+  echo "----- diagnostics" >&2
+  journalctl -u "mnt-$LABEL.mount" -u selfhost-agent.service --no-pager -n 40 2>&1 | cut -c1-300 || true
+  dmesg 2>/dev/null | tail -n 15 || true
+  systemctl list-units --all 'dev-disk-by*' --no-pager 2>&1 || true
+  ls -l /dev/disk/by-uuid 2>&1 || true
+  lsblk -o NAME,TYPE,FSTYPE,UUID,MOUNTPOINTS 2>&1 || true
+  findmnt -R /mnt 2>&1 || true
+  echo "----- end diagnostics" >&2
+}
+
 fail() {
   echo "GATE FAILED: $*" >&2
+  diagnose
   exit 1
 }
 
