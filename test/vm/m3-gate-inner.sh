@@ -139,7 +139,7 @@ reply="$(call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"label\":\"$L
 echo "$reply" | ok || fail "disk.format failed: $reply"
 UUID="$(echo "$reply" | jq -r .data.uuid)"
 save_state
-if ! wait_for 15 "/mnt/$LABEL to be mounted" mountpoint -q "/mnt/$LABEL"; then :; fi
+for _ in $(seq 1 15); do mountpoint -q "/mnt/$LABEL" && break; sleep 1; done
 mountpoint -q "/mnt/$LABEL" || {
   systemctl status "$(unit_name "/mnt/$LABEL")" --no-pager || true
   journalctl -u "$(unit_name "/mnt/$LABEL")" --no-pager -n 30 || true
