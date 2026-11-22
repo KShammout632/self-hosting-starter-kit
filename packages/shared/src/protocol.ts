@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   'not_implemented',
   'busy',
   'docker_unavailable',
+  'not_installed',
   'failed',
 ] as const;
 export const errorCode = z.enum(ERROR_CODES);

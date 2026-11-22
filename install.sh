@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# Self-hosting starter kit installer for Ubuntu Server 24.04 (x86-64).
+# Safe to run again: running it a second time repairs a broken install.
+#
+#   curl -fsSL https://raw.githubusercontent.com/KShammout632/self-hosting-starting-kit/main/install.sh -o install.sh
+#   less install.sh   # optional: read it first
+#   sudo bash install.sh
+#
+# For testing, SELFHOST_BUNDLE_DIR points at a folder that holds the files of a release
+# (see scripts/make-bundle.sh) and skips the download. SELFHOST_SKIP_RESOURCE_CHECKS=1 skips the
+# RAM and disk checks, because CI machines are smaller than the hardware the kit targets.
+set -euo pipefail
+
+KIT_VERSION="0.1.0"
+NODE_VERSION="22.23.3"
+REPO="KShammout632/self-hosting-starting-kit"
+HELP_URL="https://github.com/${REPO}"
+LOG_FILE="/var/log/selfhost-install.log"
+
+say() { printf '\n==> %s\n' "$*"; }
+note() { printf '    %s\n' "$*"; }
+die() {
+  printf '\nThe installer stopped: %s\nMore help: %s\n' "$*" "$HELP_URL" >&2
+  exit 1
+}
+
+[ "$(id -u)" -eq 0 ] || die "Please run it with sudo: sudo bash install.sh"
+
+exec > >(tee -a "$LOG_FILE") 2>&1
+trap 'printf "\nSomething went wrong. The full log is in %s\n" "$LOG_FILE" >&2' ERR
+
+export DEBIAN_FRONTEND=noninteractive
+apt_install() { apt-get install -y -qq -o DPkg::Lock::Timeout=120 "$@" >/dev/null; }
+
+preflight() {
+  say "Checking this machine"
+
+  local os_id os_version
+  os_id="$(. /etc/os-release && echo "${ID:-}")"
+  os_version="$(. /etc/os-release && echo "${VERSION_ID:-}")"
+  [ "$os_id" = "ubuntu" ] && [ "$os_version" = "24.04" ] ||
+    die "This kit needs Ubuntu Server 24.04. This machine runs ${os_id:-unknown} ${os_version:-unknown}."
+
+  [ "$(uname -m)" = "x86_64" ] || die "This kit needs a 64-bit Intel or AMD processor (x86-64)."
+
+  if [ "${SELFHOST_SKIP_RESOURCE_CHECKS:-0}" != "1" ]; then
+    local mem_kb disk_kb
+    mem_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+    # 4 GB machines report a little under 4 GB, so allow for that.
+    [ "$mem_kb" -ge 3500000 ] || die "This machine has less than 4 GB of memory, which is the minimum."
+    disk_kb="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+    [ "$disk_kb" -ge $((20 * 1024 * 1024)) ] ||
+      die "The system disk needs at least 20 GB free."
+  fi
+
+  curl -fsS --max-time 20 -o /dev/null https://download.docker.com/linux/ubuntu/gpg ||
+    die "Cannot reach the internet. Check the network cable or Wi-Fi and try again."
+  note "Everything looks fine."
+}
+
+install_base_packages() {
+  say "Installing basic tools and automatic security updates"
+  apt-get update -qq
+  apt_install ca-certificates curl gnupg jq smartmontools unattended-upgrades xz-utils ufw
+  cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+}
+
+install_docker() {
+  say "Installing Docker"
+  # Ubuntu's own docker.io package conflicts with Docker's official packages.
+  for pkg in docker.io docker-doc docker-compose podman-docker; do
+    apt-get remove -y -qq "$pkg" >/dev/null 2>&1 || true
+  done
+
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  cat >/etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+  apt-get update -qq
+  apt_install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  systemctl enable --now docker
+  docker compose version >/dev/null
+}
+
+install_tailscale() {
+  say "Installing Tailscale (you sign in to it later, from the dashboard)"
+  install -m 0755 -d /usr/share/keyrings
+  curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg \
+    -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+  curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list \
+    -o /etc/apt/sources.list.d/tailscale.list
+  apt-get update -qq
+  apt_install tailscale
+  systemctl enable --now tailscaled
+}
+
+install_intel_gpu() {
+  if [ -e /dev/dri/renderD128 ]; then
+    say "Found a graphics chip, installing video acceleration for Jellyfin"
+    # Not fatal: without it Jellyfin still works, it just transcodes on the CPU.
+    apt_install intel-media-va-driver-non-free vainfo ||
+      note "Could not install the video acceleration driver. Jellyfin will use the CPU instead."
+  else
+    say "No graphics chip found, Jellyfin will transcode on the CPU"
+  fi
+}
+
+create_user_and_folders() {
+  say "Creating the selfhost user and folders"
+  getent group selfhost >/dev/null || groupadd --system selfhost
+  id -u selfhost >/dev/null 2>&1 ||
+    useradd --system --gid selfhost --no-create-home --shell /usr/sbin/nologin selfhost
+  for group in video render; do
+    getent group "$group" >/dev/null && usermod -aG "$group" selfhost
+  done
+
+  install -d -m 0755 /opt/selfhost /opt/selfhost/agent /opt/selfhost/services \
+    /opt/selfhost/config /opt/selfhost/backups
+  install -d -m 0750 -o selfhost -g selfhost /var/lib/selfhost
+  # Group-writable and setgid, so people in the selfhost group can add media over SSH or Samba later.
+  install -d -m 2775 -o selfhost -g selfhost /srv/media /srv/media/movies /srv/media/tv \
+    /srv/media/home-videos /srv/media/music /srv/photos /srv/nextcloud
+}
+
+# Sets BUNDLE to a folder holding agent.cjs, selfhost-agent.service, selfhost-cli.mjs and uninstall.sh.
+fetch_bundle() {
+  if [ -n "${SELFHOST_BUNDLE_DIR:-}" ]; then
+    BUNDLE="$SELFHOST_BUNDLE_DIR"
+    return
+  fi
+  say "Downloading kit version ${KIT_VERSION}"
+  local work name base
+  work="$(mktemp -d)"
+  name="selfhost-kit-${KIT_VERSION}-linux-x64.tar.gz"
+  base="https://github.com/${REPO}/releases/download/v${KIT_VERSION}"
+  curl -fsSL "$base/$name" -o "$work/$name" || die "Could not download kit version ${KIT_VERSION}."
+  curl -fsSL "$base/$name.sha256" -o "$work/$name.sha256" || die "Could not download the checksum."
+  (cd "$work" && sha256sum -c "$name.sha256") || die "The download is corrupt or has been tampered with."
+  mkdir "$work/bundle"
+  tar -xzf "$work/$name" -C "$work/bundle"
+  BUNDLE="$work/bundle"
+}
+
+install_node() {
+  local target=/opt/selfhost/agent/node
+  if [ -x "$target" ] && [ "$("$target" --version)" = "v${NODE_VERSION}" ]; then
+    note "Node ${NODE_VERSION} is already installed."
+    return
+  fi
+  say "Installing the Node runtime for the agent"
+  local work base tarball
+  work="$(mktemp -d)"
+  base="https://nodejs.org/dist/v${NODE_VERSION}"
+  tarball="node-v${NODE_VERSION}-linux-x64.tar.xz"
+  curl -fsSL "$base/$tarball" -o "$work/$tarball"
+  curl -fsSL "$base/SHASUMS256.txt" -o "$work/SHASUMS256.txt"
+  (cd "$work" && grep " ${tarball}\$" SHASUMS256.txt | sha256sum -c -) ||
+    die "The Node download failed its checksum."
+  tar -xJf "$work/$tarball" --strip-components=2 -C "$work" "node-v${NODE_VERSION}-linux-x64/bin/node"
+  # Move into place instead of overwriting, which fails while the agent is running.
+  install -m 0755 "$work/node" "$target.new"
+  mv -f "$target.new" "$target"
+  rm -rf "$work"
+}
+
+install_agent() {
+  say "Installing the selfhost agent"
+  install_node
+  install -m 0644 "$BUNDLE/agent.cjs" /opt/selfhost/agent/agent.cjs
+  install -m 0644 "$BUNDLE/selfhost-cli.mjs" /opt/selfhost/agent/selfhost-cli.mjs
+  install -m 0755 "$BUNDLE/uninstall.sh" /opt/selfhost/uninstall.sh
+  cat >/usr/local/bin/selfhost <<'EOF'
+#!/bin/sh
+exec /opt/selfhost/agent/node /opt/selfhost/agent/selfhost-cli.mjs "$@"
+EOF
+  chmod 0755 /usr/local/bin/selfhost
+
+  install -m 0644 "$BUNDLE/selfhost-agent.service" /etc/systemd/system/selfhost-agent.service
+  systemctl daemon-reload
+  systemctl enable selfhost-agent.service
+  # Restart, not just start, so an install over an older version picks up the new agent.
+  systemctl restart selfhost-agent.service
+
+  for _ in $(seq 1 40); do
+    [ -S /run/selfhost/agent.sock ] && break
+    sleep 0.5
+  done
+  [ -S /run/selfhost/agent.sock ] || {
+    journalctl -u selfhost-agent.service --no-pager -n 30 || true
+    die "The agent did not start."
+  }
+}
+
+setup_firewall() {
+  say "Turning on the firewall"
+  # Never lock out the person installing over SSH, even if SSH uses another port.
+  local ports port
+  ports="$( (sshd -T 2>/dev/null || true) | awk '$1 == "port" {print $2}')"
+  for port in 22 $ports; do
+    ufw allow "${port}/tcp" >/dev/null
+  done
+  ufw allow in on tailscale0 >/dev/null
+  ufw default deny incoming >/dev/null
+  ufw default allow outgoing >/dev/null
+  ufw --force enable >/dev/null
+  note "Docker publishes service ports itself, so the firewall does not cover them."
+  note "Do not forward ports on your router. Remote access goes through Tailscale."
+}
+
+finish() {
+  local ip
+  ip="$(hostname -I | awk '{print $1}')"
+  say "Installed"
+  cat <<EOF
+
+The server is ready. The web dashboard arrives in a later release, so for now manage
+services with the selfhost command. For example, to install Jellyfin:
+
+    sudo selfhost install jellyfin
+
+Then open http://${ip:-your-server-ip}:8096 in a browser.
+Put your movies in /srv/media/movies, shows in /srv/media/tv.
+
+The install log is saved at ${LOG_FILE}.
+To remove everything later: sudo bash /opt/selfhost/uninstall.sh
+EOF
+}
+
+preflight
+install_base_packages
+install_docker
+install_tailscale
+install_intel_gpu
+create_user_and_folders
+fetch_bundle
+install_agent
+setup_firewall
+finish

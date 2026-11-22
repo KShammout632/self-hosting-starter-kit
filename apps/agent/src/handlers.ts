@@ -12,11 +12,15 @@ import pkg from '../package.json' with { type: 'json' };
 import type { DockerClient } from './docker';
 import { AgentError } from './errors';
 import type { Runner } from './exec';
+import type { HostFs, Paths } from './host';
+import { serviceHandlers } from './service-handlers';
 
 export interface Deps {
   dryRun: boolean;
   docker: DockerClient;
   run: Runner;
+  paths: Paths;
+  fs: HostFs;
 }
 
 // A handler either returns data for one reply, or a stream that becomes chunk messages then end.
@@ -51,6 +55,8 @@ const parseTailscale = (stdout: string): TailscaleStatusResult => {
 };
 
 export const handlers: Handlers = {
+  ...serviceHandlers,
+
   async 'agent.version'(_request, deps) {
     const data: AgentVersionResult = { version: pkg.version, dryRun: deps.dryRun };
     return { data };

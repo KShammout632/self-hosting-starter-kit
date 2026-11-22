@@ -3,6 +3,7 @@ import { createDispatcher } from './dispatch';
 import { createDockerClient, createFixtureDockerClient } from './docker';
 import { dryRunRunner, run } from './exec';
 import { handlers } from './handlers';
+import { DEFAULT_PATHS, dryRunFs, realFs } from './host';
 import { createAgentServer } from './server';
 import { listenOnSocket } from './socket';
 
@@ -15,6 +16,8 @@ async function main() {
       dryRun: config.dryRun,
       docker: config.dryRun ? createFixtureDockerClient() : createDockerClient(),
       run: config.dryRun ? dryRunRunner : run,
+      paths: DEFAULT_PATHS,
+      fs: config.dryRun ? dryRunFs : realFs,
     },
   });
 

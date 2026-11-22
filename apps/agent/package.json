@@ -1,14 +1,15 @@
-{
+﻿{
   "name": "@selfhost/agent",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/main.ts --dry-run --socket /tmp/selfhost-agent.sock",
+    "dev": "tsup && node dist/agent.cjs --dry-run --socket /tmp/selfhost-agent.sock",
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@selfhost/catalog": "workspace:*",
     "@selfhost/shared": "workspace:*",
     "dockerode": "^5.0.1"
   },

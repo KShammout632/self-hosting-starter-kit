@@ -26,6 +26,14 @@ jobs:
           node apps/agent/dist/agent.cjs --dry-run --socket /tmp/agent.sock &
           sleep 1
           node test/vm/check-agent.mjs /tmp/agent.sock --dry-run
+      - name: selfhost command talks to the dry-run agent
+        run: |
+          node apps/agent/dist/agent.cjs --dry-run --socket /tmp/agent2.sock &
+          sleep 1
+          export SELFHOST_AGENT_SOCKET=/tmp/agent2.sock
+          node deploy/selfhost-cli.mjs install jellyfin
+          node deploy/selfhost-cli.mjs logs jellyfin --tail 5
+          node deploy/selfhost-cli.mjs status
 
   # Runs on a real Ubuntu 24.04 machine with systemd and Docker, so it also covers the M0 exit gate.
   agent-gate:
@@ -45,3 +53,23 @@ jobs:
           mkdir /tmp/gate
           cp apps/agent/dist/agent.cjs deploy/selfhost-agent.service test/vm/check-agent.mjs /tmp/gate/
           sudo bash test/vm/m0-gate-inner.sh /tmp/gate
+
+  # M1 exit gate: runs install.sh on a real Ubuntu 24.04 machine, installs Jellyfin and checks it
+  # indexes and serves a test video.
+  install-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: bash scripts/make-bundle.sh /tmp/bundle
+      - run: cp test/vm/m1-gate-inner.sh /tmp/bundle/
+      - name: Install the kit, install Jellyfin and play a test video
+        run: sudo bash /tmp/bundle/m1-gate-inner.sh /tmp/bundle

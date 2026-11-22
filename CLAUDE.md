@@ -45,6 +45,7 @@ Self-hosting starter kit: one command turns a fresh Ubuntu Server 24.04 machine 
 - Install tests need a real Ubuntu VM or hardware, which a cloud session may not have. Say what was not tested so the owner can run it.
 - UI text is plain English for non-technical users; hide technical detail behind a "Show details" toggle.
 - Writing style in docs, UI copy and comments: no em dashes.
+- Comments: only add one when it gives important context the code cannot, such as why something is done a certain way, a non-obvious constraint, or a security reason. Do not comment what the code plainly does, restate names or types, or narrate steps. Remove comments that fail this test when touching a file.
 
 ## Commands
 

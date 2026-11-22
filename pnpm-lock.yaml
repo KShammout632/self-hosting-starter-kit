@@ -41,6 +41,9 @@ importers:
 
   apps/agent:
     dependencies:
+      '@selfhost/catalog':
+        specifier: workspace:*
+        version: link:../../packages/catalog
       '@selfhost/shared':
         specifier: workspace:*
         version: link:../../packages/shared

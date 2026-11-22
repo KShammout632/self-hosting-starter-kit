@@ -44,7 +44,7 @@ describe('jellyfin template', () => {
   it('renders valid compose YAML from the manifest pin', () => {
     const compose = parse(renderTemplate(template, { ...vars, GPU: false }));
     const service = compose.services.jellyfin;
-    expect(service.image).toBe('jellyfin/jellyfin:10.10.7');
+    expect(service.image).toBe('jellyfin/jellyfin:12.4');
     expect(service.user).toBe('1001:1001');
     expect(service.ports).toEqual(['8096:8096']);
     expect(service.devices).toBeUndefined();

@@ -8,6 +8,7 @@ import { createDispatcher } from './dispatch';
 import type { DockerClient } from './docker';
 import { AgentError } from './errors';
 import { dryRunRunner } from './exec';
+import { DEFAULT_PATHS, dryRunFs } from './host';
 import { deriveServiceState, handlers, type Deps, type Handlers } from './handlers';
 import { createAgentServer } from './server';
 
@@ -21,6 +22,8 @@ const makeDeps = (overrides: Partial<Deps> = {}): Deps => ({
   dryRun: true,
   docker: { listServiceContainers: async () => [container('running', 'healthy')] },
   run: dryRunRunner,
+  paths: DEFAULT_PATHS,
+  fs: dryRunFs,
   ...overrides,
 });
 
@@ -122,9 +125,7 @@ describe('dispatcher', () => {
   });
 
   it('returns not_implemented for valid actions without a handler', async () => {
-    const [reply] = await collect(
-      dispatcher()(line({ id: 'a', action: 'service.start', service: 'jellyfin' })),
-    );
+    const [reply] = await collect(dispatcher()(line({ id: 'a', action: 'system.reboot' })));
     expect(reply).toMatchObject({ ok: false, error: { code: 'not_implemented' } });
   });
 
