@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import type { AgentResponse } from '@selfhost/shared';
+import { createConfirmTokens } from './confirm';
 import { createDispatcher } from './dispatch';
+import { dryRunStreamer } from './exec';
 import { handlers, type Deps } from './handlers';
 import type { HostFs, Paths } from './host';
 import { parseComposeLogs } from './logs';
@@ -53,6 +55,9 @@ function makeHost(
     run,
     paths,
     fs,
+    stream: dryRunStreamer,
+    httpCheck: async () => true,
+    confirmTokens: createConfirmTokens(),
   };
   return { deps, files, dirs, removed, commands };
 }
@@ -199,7 +204,7 @@ describe('service.uninstall', () => {
       action: 'service.uninstall',
       service: 'jellyfin',
       deleteData: true,
-      confirm: 'a'.repeat(32),
+      confirm: host.deps.confirmTokens.issue('service.uninstall', 'jellyfin'),
     });
     expect(reply).toMatchObject([{ ok: true }]);
     expect(host.removed).toEqual([
@@ -276,5 +281,52 @@ describe('parseComposeLogs', () => {
     expect([...parseComposeLogs('plain line\n\n')]).toEqual([
       { ts: null, stream: 'stdout', line: 'plain line' },
     ]);
+  });
+});
+
+describe('logs.stream with follow', () => {
+  it('streams lines from docker compose logs --follow and stops when the caller disconnects', async () => {
+    const host = makeHost();
+    await install(host.deps);
+    const calls: string[][] = [];
+    let stopped = false;
+    host.deps.stream = async function* (file, args, signal) {
+      calls.push([file, ...args]);
+      yield 'selfhost-jellyfin-1  | 2026-11-22T09:30:00.000000000Z first';
+      yield 'selfhost-jellyfin-1  | 2026-11-22T09:30:01.000000000Z second';
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
+      stopped = true;
+    };
+
+    const controller = new AbortController();
+    const dispatch = createDispatcher({ handlers, deps: host.deps, log: () => {} });
+    const received: AgentResponse[] = [];
+    const run = (async () => {
+      for await (const message of dispatch(
+        JSON.stringify({
+          id: 'f1',
+          action: 'logs.stream',
+          service: 'jellyfin',
+          tail: 5,
+          follow: true,
+        }),
+        controller.signal,
+      )) {
+        received.push(message);
+      }
+    })();
+
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    expect(received[0]).toMatchObject({
+      chunk: { ts: '2026-11-22T09:30:00.000000000Z', line: 'first' },
+    });
+    expect(calls[0]?.slice(0, 1)).toEqual(['docker']);
+    expect(calls[0]).toContain('--follow');
+    expect(calls[0]).toContain('5');
+
+    controller.abort();
+    await run;
+    expect(stopped).toBe(true);
+    expect(received.at(-1)).toEqual({ id: 'f1', end: true });
   });
 });

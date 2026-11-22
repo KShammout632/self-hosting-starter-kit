@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+  confirmKind,
+  confirmTarget,
   confirmToken,
   filesystemUuid,
   folderSubpath,
@@ -11,6 +13,7 @@ import {
   snapshotId,
   tailscaleHostname,
   volumeLabel,
+  type ConfirmKind,
 } from './primitives';
 
 const action = <A extends string, S extends z.ZodRawShape>(name: A, shape: S) =>
@@ -31,7 +34,7 @@ export const agentRequest = z.discriminatedUnion('action', [
   action('service.update', service),
   action('service.status', service),
 
-  action('logs.stream', { ...service, tail: logTail }),
+  action('logs.stream', { ...service, tail: logTail, follow: z.boolean().default(false) }),
   action('logs.download', service),
 
   action('disk.list', {}),
@@ -59,6 +62,8 @@ export const agentRequest = z.discriminatedUnion('action', [
 
   action('snapshot.create', service),
   action('snapshot.restore', { ...service, snapshot: snapshotId }),
+
+  action('confirm.issue', { kind: confirmKind, target: confirmTarget }),
 
   action('agent.version', {}),
   action('kit.update', { version: kitVersion }),
@@ -90,10 +95,21 @@ export function serviceLockKey(request: AgentRequest): ServiceLockKey | null {
 }
 type ServiceLockKey = z.infer<typeof serviceName>;
 
-// Destructive actions must carry a confirm token. The agent rejects them without one.
+export interface ConfirmBinding {
+  kind: ConfirmKind;
+  target: string;
+}
+
+// A confirm token is only good for the one action and target it was issued for.
+export function confirmBinding(request: AgentRequest): ConfirmBinding | null {
+  if (request.action === 'disk.format') return { kind: 'disk.format', target: request.uuid };
+  if (request.action === 'service.uninstall' && request.deleteData) {
+    return { kind: 'service.uninstall', target: request.service };
+  }
+  return null;
+}
+
+// Destructive actions must carry a confirm token. The agent rejects them without a valid one.
 export function requiresConfirmToken(request: AgentRequest): boolean {
-  return (
-    request.action === 'disk.format' ||
-    (request.action === 'service.uninstall' && request.deleteData)
-  );
+  return confirmBinding(request) !== null;
 }

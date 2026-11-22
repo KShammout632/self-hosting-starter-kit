@@ -10,6 +10,9 @@ RestartSec=2
 # Creates /run/selfhost. The socket inside is root:selfhost 0660, set by the agent.
 RuntimeDirectory=selfhost
 RuntimeDirectoryMode=0755
+# Keep the folder when the agent restarts. The dashboard container has it mounted, and a new folder
+# would leave the container looking at an old, empty one.
+RuntimeDirectoryPreserve=yes
 NoNewPrivileges=yes
 
 [Install]

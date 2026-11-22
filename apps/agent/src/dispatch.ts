@@ -1,17 +1,21 @@
 import {
+  confirmBinding,
   parseRequest,
-  requiresConfirmToken,
   serviceLockKey,
   type AgentRequest,
   type AgentResponse,
   type ErrorCode,
 } from '@selfhost/shared';
 import { AgentError } from './errors';
-import type { Deps, HandlerResult, Handlers } from './handlers';
+import type { Deps, HandlerContext, HandlerResult, Handlers } from './handlers';
 
-type AnyHandler = (request: AgentRequest, deps: Deps) => Promise<HandlerResult>;
+type AnyHandler = (
+  request: AgentRequest,
+  deps: Deps,
+  context: HandlerContext,
+) => Promise<HandlerResult>;
 
-export type Dispatch = (line: string) => AsyncGenerator<AgentResponse>;
+export type Dispatch = (line: string, signal?: AbortSignal) => AsyncGenerator<AgentResponse>;
 
 export interface DispatchOptions {
   handlers: Handlers;
@@ -33,11 +37,14 @@ export function createDispatcher({
   // One mutating action per service at a time.
   const busyServices = new Set<string>();
 
-  async function* execute(request: AgentRequest): AsyncGenerator<AgentResponse> {
+  async function* execute(
+    request: AgentRequest,
+    signal: AbortSignal,
+  ): AsyncGenerator<AgentResponse> {
     const handler = handlers[request.action] as AnyHandler | undefined;
     if (!handler) throw new AgentError('not_implemented', 'This action is not available yet.');
 
-    const result = await handler(request, deps);
+    const result = await handler(request, deps, { signal });
     if ('stream' in result) {
       for await (const chunk of result.stream) yield { id: request.id, chunk };
       yield { id: request.id, end: true };
@@ -46,7 +53,7 @@ export function createDispatcher({
     }
   }
 
-  return async function* dispatch(line) {
+  return async function* dispatch(line, signal = new AbortController().signal) {
     const parsed = parseRequest(line);
     if (!parsed.ok) {
       log({ event: 'rejected', code: parsed.code });
@@ -62,8 +69,13 @@ export function createDispatcher({
     let holdsLock = false;
 
     try {
-      if (requiresConfirmToken(request) && !('confirm' in request && request.confirm)) {
+      const binding = confirmBinding(request);
+      const token = 'confirm' in request ? request.confirm : undefined;
+      if (binding && !token) {
         throw new AgentError('confirm_required', 'This action needs a confirmation token.');
+      }
+      if (binding && token && !deps.confirmTokens.verify(token, binding.kind, binding.target)) {
+        throw new AgentError('confirm_required', 'The confirmation is invalid or has expired.');
       }
       if (lockKey !== null) {
         if (busyServices.has(lockKey)) {
@@ -72,7 +84,8 @@ export function createDispatcher({
         busyServices.add(lockKey);
         holdsLock = true;
       }
-      yield* execute(request);
+      if (binding && token) deps.confirmTokens.consume(token);
+      yield* execute(request, signal);
     } catch (error) {
       if (error instanceof AgentError) {
         outcome = error.code;

@@ -4,6 +4,24 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/rate-limit": "^11.3.0",
+    "@fastify/static": "^10.1.12",
+    "@node-rs/argon2": "2.2.2",
+    "@selfhost/catalog": "workspace:^",
+    "@selfhost/shared": "workspace:^",
+    "better-sqlite3": "12.11.1",
+    "fastify": "^5.12.8",
+    "zod": "^4.6.7"
   }
 }

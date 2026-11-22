@@ -25,11 +25,20 @@ export function createDockerClient(socketPath = '/var/run/docker.sock'): DockerC
           all: true,
           filters: { label: [`com.docker.compose.project=${projectName(service)}`] },
         });
-        return containers.map((container) => ({
-          name: (container.Names[0] ?? container.Id).replace(/^\//, ''),
-          state: container.State,
-          health: parseHealth(container.Status),
-        }));
+        return await Promise.all(
+          containers.map(async (container) => ({
+            name: (container.Names[0] ?? container.Id).replace(/^\//, ''),
+            state: container.State,
+            health: parseHealth(container.Status),
+            startedAt: await docker
+              .getContainer(container.Id)
+              .inspect()
+              .then(
+                (info) => (info.State.Running ? info.State.StartedAt : null),
+                () => null,
+              ),
+          })),
+        );
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
         if (code === 'ENOENT' || code === 'ECONNREFUSED' || code === 'EACCES') {
@@ -44,7 +53,14 @@ export function createDockerClient(socketPath = '/var/run/docker.sock'): DockerC
 export function createFixtureDockerClient(): DockerClient {
   return {
     async listServiceContainers(service) {
-      return [{ name: projectName(service), state: 'running', health: 'healthy' }];
+      return [
+        {
+          name: projectName(service),
+          state: 'running',
+          health: 'healthy',
+          startedAt: new Date().toISOString(),
+        },
+      ];
     },
   };
 }

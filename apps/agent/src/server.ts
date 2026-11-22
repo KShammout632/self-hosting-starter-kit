@@ -8,9 +8,11 @@ export function createAgentServer(dispatch: Dispatch, maxLineBytes = MAX_LINE_BY
     socket.setEncoding('utf8');
     socket.on('error', () => socket.destroy());
     let buffer = '';
+    const closed = new AbortController();
+    socket.on('close', () => closed.abort());
 
     const handleLine = async (line: string) => {
-      for await (const message of dispatch(line)) {
+      for await (const message of dispatch(line, closed.signal)) {
         if (socket.destroyed) return;
         socket.write(JSON.stringify(message) + '\n');
       }

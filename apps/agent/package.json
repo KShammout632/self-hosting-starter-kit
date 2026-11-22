@@ -11,7 +11,8 @@
   "dependencies": {
     "@selfhost/catalog": "workspace:*",
     "@selfhost/shared": "workspace:*",
-    "dockerode": "^5.0.1"
+    "dockerode": "^5.0.1",
+    "systeminformation": "^5.27.0"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.2"
