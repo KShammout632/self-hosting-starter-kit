@@ -1,4 +1,5 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -38,4 +39,74 @@ export const dryRunRunner: Runner = async (file, args) => {
   const fixture = DRY_RUN_FIXTURES[file];
   if (fixture === undefined) throw new Error(`dry-run: no fixture for ${file}`);
   return fixture;
+};
+
+// Checks a service's health URL on this machine. The URL is built from the catalog, never from a request.
+export type HttpChecker = (url: string) => Promise<boolean>;
+
+export const httpCheck: HttpChecker = async (url) => {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    return response.status >= 200 && response.status < 400;
+  } catch {
+    return false;
+  }
+};
+
+export const dryRunHttpCheck: HttpChecker = async (url) => {
+  console.error(JSON.stringify({ event: 'dry-run', would: ['GET', url] }));
+  return true;
+};
+
+export type LineStreamer = (
+  file: string,
+  args: readonly string[],
+  signal: AbortSignal,
+) => AsyncGenerator<string>;
+
+// Follows a command's output line by line until it ends or the signal aborts. This uses spawn with
+// an argument array and no shell, like the runner above. execFile is not used here because it
+// keeps all output in memory, which never ends for a followed log.
+export const streamLines: LineStreamer = async function* (file, args, signal) {
+  const child = spawn(file, [...args], {
+    stdio: ['ignore', 'pipe', 'ignore'],
+    shell: false,
+    signal,
+  });
+  const failed = new Promise<never>((_, reject) => child.once('error', reject));
+  failed.catch(() => {});
+  const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  try {
+    for (;;) {
+      const next = await Promise.race([lines.next(), failed]);
+      if (next.done) return;
+      yield next.value;
+    }
+  } catch (error) {
+    if (signal.aborted) return;
+    throw error;
+  } finally {
+    child.kill();
+  }
+};
+
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+
+export const dryRunStreamer: LineStreamer = async function* (file, args, signal) {
+  console.error(JSON.stringify({ event: 'dry-run', would: [file, ...args] }));
+  for (let n = 1; !signal.aborted; n++) {
+    yield `selfhost-jellyfin-1  | ${new Date().toISOString()} dry-run log line ${n}`;
+    await sleep(2000, signal);
+  }
 };

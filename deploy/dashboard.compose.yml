@@ -1,0 +1,24 @@
+# The dashboard. It runs without root and never sees the Docker socket: its only way to change
+# anything on the server is the agent socket in /run/selfhost.
+name: selfhost-dashboard
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: selfhost/dashboard:local
+    restart: unless-stopped
+    user: '${SELFHOST_UID}:${SELFHOST_GID}'
+    ports:
+      - '8080:8080'
+    volumes:
+      - /run/selfhost:/run/selfhost
+      - /var/lib/selfhost:/var/lib/selfhost
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

@@ -7,7 +7,8 @@ import { parseConfig } from './config';
 import { createDispatcher } from './dispatch';
 import type { DockerClient } from './docker';
 import { AgentError } from './errors';
-import { dryRunRunner } from './exec';
+import { createConfirmTokens } from './confirm';
+import { dryRunRunner, dryRunStreamer } from './exec';
 import { DEFAULT_PATHS, dryRunFs } from './host';
 import { deriveServiceState, handlers, type Deps, type Handlers } from './handlers';
 import { createAgentServer } from './server';
@@ -16,6 +17,7 @@ const container = (state: string, health: ContainerSummary['health'] = null) => 
   name: 'c',
   state,
   health,
+  startedAt: null,
 });
 
 const makeDeps = (overrides: Partial<Deps> = {}): Deps => ({
@@ -24,6 +26,9 @@ const makeDeps = (overrides: Partial<Deps> = {}): Deps => ({
   run: dryRunRunner,
   paths: DEFAULT_PATHS,
   fs: dryRunFs,
+  stream: dryRunStreamer,
+  httpCheck: async () => true,
+  confirmTokens: createConfirmTokens(),
   ...overrides,
 });
 
@@ -77,6 +82,29 @@ describe('dispatcher', () => {
       ok: true,
       data: { service: 'jellyfin', state: 'running', containers: [{ health: 'healthy' }] },
     });
+  });
+
+  it('checks the health URL from the catalog only while all containers run', async () => {
+    const urls: string[] = [];
+    const httpCheck = async (url: string) => {
+      urls.push(url);
+      return false;
+    };
+    const status = (docker: DockerClient) =>
+      collect(
+        dispatcher(
+          handlers,
+          makeDeps({ docker, httpCheck }),
+        )(line({ id: 'a', action: 'service.status', service: 'jellyfin' })),
+      );
+
+    const [running] = await status({ listServiceContainers: async () => [container('running')] });
+    expect(running).toMatchObject({ data: { http: { ok: false } } });
+    expect(urls).toEqual(['http://127.0.0.1:8096/health']);
+
+    const [stopped] = await status({ listServiceContainers: async () => [container('exited')] });
+    expect(stopped).toMatchObject({ data: { state: 'stopped', http: null } });
+    expect(urls).toHaveLength(1);
   });
 
   it('reports Docker being unavailable', async () => {
@@ -178,11 +206,13 @@ describe('dispatcher', () => {
         return { data: {} };
       },
     };
-    const d = dispatcher(h);
     const uninstall = (id: string, deleteData: boolean, confirm?: string) =>
       line({ id, action: 'service.uninstall', service: 'immich', deleteData, confirm });
 
-    const first = collect(d(uninstall('a', true, 'a'.repeat(32))));
+    const deps = makeDeps();
+    const token = deps.confirmTokens.issue('service.uninstall', 'immich');
+    const d = dispatcher(h, deps);
+    const first = collect(d(uninstall('a', true, token)));
     // Rejected for the missing token. It must not free the lock held by the first action.
     await collect(d(uninstall('b', true)));
     const [busy] = await collect(d(uninstall('c', false)));

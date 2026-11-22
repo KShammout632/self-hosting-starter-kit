@@ -26,7 +26,10 @@ die() {
 
 [ "$(id -u)" -eq 0 ] || die "Please run it with sudo: sudo bash install.sh"
 
+# The setup code is printed on the original terminal only (fd 3), so it never lands in the log file.
+exec 3>&1
 exec > >(tee -a "$LOG_FILE") 2>&1
+chmod 0600 "$LOG_FILE"
 trap 'printf "\nSomething went wrong. The full log is in %s\n" "$LOG_FILE" >&2' ERR
 
 export DEBIAN_FRONTEND=noninteractive
@@ -132,7 +135,7 @@ create_user_and_folders() {
     /srv/media/home-videos /srv/media/music /srv/photos /srv/nextcloud
 }
 
-# Sets BUNDLE to a folder holding agent.cjs, selfhost-agent.service, selfhost-cli.mjs and uninstall.sh.
+# Sets BUNDLE to a folder holding agent.cjs, selfhost-agent.service, selfhost-cli.mjs, uninstall.sh and dashboard/.
 fetch_bundle() {
   if [ -n "${SELFHOST_BUNDLE_DIR:-}" ]; then
     BUNDLE="$SELFHOST_BUNDLE_DIR"
@@ -201,6 +204,44 @@ EOF
   }
 }
 
+# Sets SETUP_CODE when this is a first install. The API deletes the code file once the admin account
+# exists, so the file being absent next to an existing database means setup is already done.
+prepare_setup_code() {
+  SETUP_CODE=""
+  local code_file=/var/lib/selfhost/setup-code
+  if [ -e "$code_file" ] || [ -e /var/lib/selfhost/selfhost.db ]; then return; fi
+  SETUP_CODE="$(head -c 2048 /dev/urandom | tr -dc 'A-HJ-NP-Z2-9' | cut -c1-8)"
+  [ "${#SETUP_CODE}" -eq 8 ] || die "Could not create a setup code."
+  printf '%s' "$SETUP_CODE" | sha256sum | cut -d' ' -f1 >"$code_file"
+  chown selfhost:selfhost "$code_file"
+  chmod 0640 "$code_file"
+}
+
+install_dashboard() {
+  say "Installing the dashboard"
+  local dir=/opt/selfhost/dashboard
+  install -d -m 0755 "$dir"
+  rm -rf "$dir/web"
+  cp -r "$BUNDLE/dashboard/web" "$dir/web"
+  for file in api.js package.json Dockerfile compose.yml; do
+    install -m 0644 "$BUNDLE/dashboard/$file" "$dir/$file"
+  done
+  {
+    echo "SELFHOST_UID=$(id -u selfhost)"
+    echo "SELFHOST_GID=$(id -g selfhost)"
+  } >"$dir/.env"
+
+  prepare_setup_code
+  docker compose --project-directory "$dir" --file "$dir/compose.yml" up --detach --build --remove-orphans
+
+  for _ in $(seq 1 60); do
+    curl -fsS --max-time 3 http://127.0.0.1:8080/api/health >/dev/null 2>&1 && return
+    sleep 1
+  done
+  docker compose --project-directory "$dir" --file "$dir/compose.yml" logs --tail 40 || true
+  die "The dashboard did not start."
+}
+
 setup_firewall() {
   say "Turning on the firewall"
   # Never lock out the person installing over SSH, even if SSH uses another port.
@@ -221,16 +262,27 @@ finish() {
   local ip
   ip="$(hostname -I | awk '{print $1}')"
   say "Installed"
+  {
+    echo
+    echo "The server is ready. Open the dashboard in a browser on any device at home:"
+    echo
+    echo "    http://${ip:-your-server-ip}:8080"
+    echo
+    if [ -n "$SETUP_CODE" ]; then
+      echo "The first time, it asks for this setup code:"
+      echo
+      echo "    Setup code: ${SETUP_CODE:0:4}-${SETUP_CODE:4:4}"
+      echo
+      echo "Write it down now. It is shown only once and is not saved in the install log."
+      echo "If you lose it, run: sudo selfhost reset-password"
+    else
+      echo "The dashboard is already set up. If you forgot the password or the setup code,"
+      echo "run: sudo selfhost reset-password"
+    fi
+    echo
+  } >&3
   cat <<EOF
-
-The server is ready. The web dashboard arrives in a later release, so for now manage
-services with the selfhost command. For example, to install Jellyfin:
-
-    sudo selfhost install jellyfin
-
-Then open http://${ip:-your-server-ip}:8096 in a browser.
 Put your movies in /srv/media/movies, shows in /srv/media/tv.
-
 The install log is saved at ${LOG_FILE}.
 To remove everything later: sudo bash /opt/selfhost/uninstall.sh
 EOF
@@ -244,5 +296,6 @@ install_intel_gpu
 create_user_and_folders
 fetch_bundle
 install_agent
+install_dashboard
 setup_firewall
 finish

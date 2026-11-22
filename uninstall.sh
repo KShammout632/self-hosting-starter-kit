@@ -34,6 +34,14 @@ for file in /opt/selfhost/services/*/compose.yml; do
     echo "Could not stop $name cleanly, continuing."
 done
 
+say "Removing the dashboard"
+if [ -f /opt/selfhost/dashboard/compose.yml ]; then
+  docker compose --project-directory /opt/selfhost/dashboard --file /opt/selfhost/dashboard/compose.yml down --remove-orphans ||
+    echo "Could not stop the dashboard cleanly, continuing."
+fi
+docker image rm selfhost/dashboard:local >/dev/null 2>&1 || true
+rm -rf /opt/selfhost/dashboard
+
 say "Removing the agent"
 systemctl disable --now selfhost-agent.service 2>/dev/null || true
 rm -f /etc/systemd/system/selfhost-agent.service /usr/local/bin/selfhost

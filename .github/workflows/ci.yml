@@ -21,6 +21,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Dashboard UI tests (API mocked in the browser)
+        run: |
+          pnpm --filter @selfhost/web exec playwright install --with-deps chromium
+          pnpm --filter @selfhost/web e2e
       - name: Agent bundle answers requests in dry-run mode
         run: |
           node apps/agent/dist/agent.cjs --dry-run --socket /tmp/agent.sock &
@@ -73,3 +77,38 @@ jobs:
       - run: cp test/vm/m1-gate-inner.sh /tmp/bundle/
       - name: Install the kit, install Jellyfin and play a test video
         run: sudo bash /tmp/bundle/m1-gate-inner.sh /tmp/bundle
+
+  # M2 exit gate: installs the kit, then a browser sets up the dashboard and installs, stops, starts,
+  # reads the logs of and removes Jellyfin, using only the dashboard.
+  dashboard-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: bash scripts/make-bundle.sh /tmp/bundle
+      - run: cp test/vm/m2-gate-inner.sh /tmp/bundle/
+      - name: Install the kit and check the dashboard is up and locked down
+        run: sudo bash /tmp/bundle/m2-gate-inner.sh install /tmp/bundle
+      - name: Install a browser
+        run: pnpm --filter @selfhost/web exec playwright install --with-deps chromium
+      - name: Use the dashboard in a browser
+        run: |
+          export SETUP_CODE="$(cat /tmp/gate-setup-code)"
+          export DASHBOARD_URL=http://127.0.0.1:8080
+          pnpm --filter @selfhost/web exec playwright test -c playwright.gate.config.ts
+      - name: Upload the browser trace if the gate failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-trace
+          path: apps/web/test-results
+      - name: Restart, reset password, uninstall
+        run: sudo bash /tmp/bundle/m2-gate-inner.sh finish

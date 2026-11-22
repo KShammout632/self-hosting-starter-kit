@@ -53,8 +53,10 @@ Run from the repo root (pnpm 9, Node 22; `corepack enable` provides pnpm):
 
 - `pnpm install`: install dependencies
 - `pnpm lint`, `pnpm format:check` (`pnpm format` to fix), `pnpm typecheck`, `pnpm test`
-- `pnpm build`: bundles the agent to `apps/agent/dist/agent.cjs`
+- `pnpm build`: bundles the agent to `apps/agent/dist/agent.cjs`, the API to `apps/api/dist/api.js` and the web app to `apps/web/dist`
+- `pnpm --filter @selfhost/web dev`: Vite dev server (proxies `/api` to port 8080); `pnpm --filter @selfhost/web e2e`: Playwright UI tests with the API mocked (`PW_CHANNEL=msedge` or `chrome` uses an installed browser)
 - `pnpm --filter @selfhost/agent dev`: run the agent in dry-run mode on a local socket
+- `bash scripts/make-bundle.sh <dir>`: collects the release files after `pnpm build`. `test/vm/m2-gate-inner.sh` and the `dashboard-gate` CI job use it for the M2 exit gate.
 - `bash test/vm/m0-gate.sh`: M0 exit gate on a fresh Ubuntu 24.04 Multipass VM (needs `pnpm build` first). CI runs the same checks in the `agent-gate` job.
 
 TypeScript is pinned to 6.x because typescript-eslint does not support 7 yet.

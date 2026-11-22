@@ -1,17 +1,23 @@
 import os from 'node:os';
-import type {
-  AgentAction,
-  AgentRequest,
-  AgentVersionResult,
-  ContainerSummary,
-  ServiceStatusResult,
-  SystemInfoResult,
-  TailscaleStatusResult,
+import { getManifest } from '@selfhost/catalog';
+import si from 'systeminformation';
+import {
+  filesystemUuid,
+  serviceName,
+  type AgentAction,
+  type AgentRequest,
+  type AgentVersionResult,
+  type ConfirmIssueResult,
+  type ContainerSummary,
+  type ServiceStatusResult,
+  type SystemInfoResult,
+  type TailscaleStatusResult,
 } from '@selfhost/shared';
 import pkg from '../package.json' with { type: 'json' };
+import { CONFIRM_TTL_MS, type ConfirmTokens } from './confirm';
 import type { DockerClient } from './docker';
 import { AgentError } from './errors';
-import type { Runner } from './exec';
+import type { HttpChecker, LineStreamer, Runner } from './exec';
 import type { HostFs, Paths } from './host';
 import { serviceHandlers } from './service-handlers';
 
@@ -21,6 +27,13 @@ export interface Deps {
   run: Runner;
   paths: Paths;
   fs: HostFs;
+  stream: LineStreamer;
+  httpCheck: HttpChecker;
+  confirmTokens: ConfirmTokens;
+}
+
+export interface HandlerContext {
+  signal: AbortSignal;
 }
 
 // A handler either returns data for one reply, or a stream that becomes chunk messages then end.
@@ -29,6 +42,7 @@ export type HandlerResult = { data?: unknown } | { stream: AsyncIterable<unknown
 export type Handler<A extends AgentAction> = (
   request: Extract<AgentRequest, { action: A }>,
   deps: Deps,
+  context: HandlerContext,
 ) => Promise<HandlerResult>;
 
 export type Handlers = { [A in AgentAction]?: Handler<A> };
@@ -63,26 +77,56 @@ export const handlers: Handlers = {
   },
 
   async 'system.info'() {
+    const [load, memory, disks, temperature] = await Promise.all([
+      si.currentLoad(),
+      si.mem(),
+      si.fsSize(),
+      si.cpuTemperature(),
+    ]);
+    const disk = disks.find((entry) => entry.mount === '/') ?? disks[0];
     const data: SystemInfoResult = {
       hostname: os.hostname(),
       platform: os.platform(),
       arch: os.arch(),
       cpuCount: os.cpus().length,
-      memTotalBytes: os.totalmem(),
-      memFreeBytes: os.freemem(),
+      memTotalBytes: memory.total,
+      memFreeBytes: memory.available,
       uptimeSeconds: Math.floor(os.uptime()),
       loadAverage: os.loadavg() as [number, number, number],
+      cpuLoadPercent: Math.round(load.currentLoad * 10) / 10,
+      diskTotalBytes: disk?.size ?? 0,
+      diskFreeBytes: disk?.available ?? 0,
+      temperatureCelsius: temperature.main ?? null,
+    };
+    return { data };
+  },
+
+  async 'confirm.issue'(request, deps) {
+    const validTarget =
+      request.kind === 'service.uninstall'
+        ? serviceName.safeParse(request.target).success
+        : filesystemUuid.safeParse(request.target).success;
+    if (!validTarget) throw new AgentError('invalid_request', 'Request arguments are not valid.');
+    const data: ConfirmIssueResult = {
+      token: deps.confirmTokens.issue(request.kind, request.target),
+      expiresInSeconds: CONFIRM_TTL_MS / 1000,
     };
     return { data };
   },
 
   async 'service.status'(request, deps) {
     const containers = await deps.docker.listServiceContainers(request.service);
-    const data: ServiceStatusResult = {
-      service: request.service,
-      state: deriveServiceState(containers),
-      containers,
-    };
+    const state = deriveServiceState(containers);
+    const manifest = getManifest(request.service);
+    const http =
+      state === 'running' && manifest
+        ? {
+            ok: await deps.httpCheck(
+              `http://127.0.0.1:${manifest.ports.lan}${manifest.health.path}`,
+            ),
+          }
+        : null;
+    const data: ServiceStatusResult = { service: request.service, state, containers, http };
     return { data };
   },
 

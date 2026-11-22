@@ -1,11 +1,14 @@
 // The `selfhost` command line helper. It is a thin client for the host agent: it sends one request
 // over the agent socket and prints the answer in plain English. All rules live in the agent.
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, chownSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import { createInterface } from 'node:readline/promises';
 
 const SOCKET_PATH = process.env.SELFHOST_AGENT_SOCKET ?? '/run/selfhost/agent.sock';
+const SETUP_CODE_FILE = process.env.SELFHOST_SETUP_CODE_FILE ?? '/var/lib/selfhost/setup-code';
 const SERVICES = {
   jellyfin: { name: 'Jellyfin', port: 8096 },
   navidrome: { name: 'Navidrome', port: 4533 },
@@ -24,6 +27,7 @@ Commands:
   status [service]       Show whether services are running
   logs <service>         Show recent log lines (add --tail 200 for more)
   uninstall <service>    Remove a service but keep its settings (add --delete-data to erase them)
+  reset-password         Get a new setup code to choose a new dashboard password
   version                Show the agent version
 
 Services: ${Object.keys(SERVICES).join(', ')}`;
@@ -127,8 +131,12 @@ async function confirmDeletion(service) {
   );
   rl.close();
   if (answer.trim() !== service) throw new UserError('Cancelled. Nothing was deleted.');
-  // The dashboard will issue these tokens after the same typed confirmation (M2).
-  return randomBytes(32).toString('base64url');
+  const { data } = await send({
+    action: 'confirm.issue',
+    kind: 'service.uninstall',
+    target: service,
+  });
+  return data.token;
 }
 
 async function main(argv) {
@@ -141,6 +149,25 @@ async function main(argv) {
     case '--help':
       console.log(USAGE);
       return;
+
+    case 'reset-password': {
+      if (process.getuid?.() !== 0)
+        throw new UserError('Run this with sudo: sudo selfhost reset-password');
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const code = Array.from(randomBytes(8), (byte) => alphabet[byte % alphabet.length]).join('');
+      writeFileSync(SETUP_CODE_FILE, createHash('sha256').update(code).digest('hex') + '\n', {
+        mode: 0o640,
+      });
+      const id = (flag) => Number(execFileSync('id', [flag, 'selfhost'], { encoding: 'utf8' }));
+      chownSync(SETUP_CODE_FILE, id('-u'), id('-g'));
+      chmodSync(SETUP_CODE_FILE, 0o640);
+      console.log(
+        `Open http://${lanAddress()}:8080 and use this setup code to choose a new password:\n`,
+      );
+      console.log(`    ${code.slice(0, 4)}-${code.slice(4)}\n`);
+      console.log('Everyone is signed out when the new password is saved.');
+      return;
+    }
 
     case 'version': {
       const { data } = await send({ action: 'agent.version' });

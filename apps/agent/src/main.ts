@@ -1,7 +1,8 @@
 import { parseConfig } from './config';
 import { createDispatcher } from './dispatch';
 import { createDockerClient, createFixtureDockerClient } from './docker';
-import { dryRunRunner, run } from './exec';
+import { createConfirmTokens } from './confirm';
+import { dryRunHttpCheck, dryRunRunner, dryRunStreamer, httpCheck, run, streamLines } from './exec';
 import { handlers } from './handlers';
 import { DEFAULT_PATHS, dryRunFs, realFs } from './host';
 import { createAgentServer } from './server';
@@ -18,6 +19,9 @@ async function main() {
       run: config.dryRun ? dryRunRunner : run,
       paths: DEFAULT_PATHS,
       fs: config.dryRun ? dryRunFs : realFs,
+      stream: config.dryRun ? dryRunStreamer : streamLines,
+      httpCheck: config.dryRun ? dryRunHttpCheck : httpCheck,
+      confirmTokens: createConfirmTokens(),
     },
   });
 

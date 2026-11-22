@@ -3,10 +3,42 @@ import type { ServiceName } from '@selfhost/shared';
 import { projectName } from './docker';
 import { AgentError } from './errors';
 import type { Deps, Handlers } from './handlers';
-import { parseComposeLogs } from './logs';
+import { parseComposeLine, parseComposeLogs, type LogLine } from './logs';
 
 async function* toAsync<T>(items: Iterable<T>): AsyncGenerator<T> {
   yield* items;
+}
+
+async function* followLogs(
+  deps: Deps,
+  service: ServiceName,
+  tail: number,
+  signal: AbortSignal,
+): AsyncGenerator<LogLine> {
+  const args = [
+    'compose',
+    '--project-name',
+    projectName(service),
+    '--file',
+    composeFile(deps, service),
+    'logs',
+    '--no-color',
+    '--timestamps',
+    '--follow',
+    '--tail',
+    String(tail),
+  ];
+  try {
+    for await (const raw of deps.stream('docker', args, signal)) {
+      const parsed = parseComposeLine(raw);
+      if (parsed) yield parsed;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new AgentError('docker_unavailable', 'Docker is not installed or cannot be reached.');
+    }
+    throw error;
+  }
 }
 
 const SAFE_TIMEZONE = /^[A-Za-z0-9_/+-]{1,64}$/;
@@ -136,9 +168,13 @@ export const serviceHandlers: Handlers = {
     return { data: {} };
   },
 
-  // Returns the last lines and ends. Following live output arrives with the dashboard in M2.
-  async 'logs.stream'(request, deps) {
+  // Without follow, returns the last lines and ends. With follow, keeps sending new lines until the
+  // caller disconnects.
+  async 'logs.stream'(request, deps, { signal }) {
     await requireInstalled(deps, request.service);
+    if (request.follow) {
+      return { stream: followLogs(deps, request.service, request.tail, signal) };
+    }
     const output = await compose(
       deps,
       request.service,
