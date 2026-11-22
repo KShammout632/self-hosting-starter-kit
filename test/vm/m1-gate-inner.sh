@@ -69,26 +69,26 @@ curl -fsS -X POST "$JELLYFIN/Startup/User" -H 'Content-Type: application/json' \
   -d '{"Name":"gate","Password":"gate-password-1"}'
 curl -fsS -X POST "$JELLYFIN/Startup/Complete"
 token="$(curl -fsS -X POST "$JELLYFIN/Users/AuthenticateByName" \
-  -H 'Content-Type: application/json' -H "X-Emby-Authorization: $AUTH" \
+  -H 'Content-Type: application/json' -H "Authorization: $AUTH" \
   -d '{"Username":"gate","Pw":"gate-password-1"}' | jq -r .AccessToken)"
 [ -n "$token" ] && [ "$token" != "null" ] || fail "could not sign in to Jellyfin"
 curl -fsS -X POST \
   "$JELLYFIN/Library/VirtualFolders?name=Movies&collectionType=movies&refreshLibrary=true" \
-  -H "X-Emby-Token: $token" -H 'Content-Type: application/json' \
+  -H "Authorization: MediaBrowser Token=\"$token\"" -H 'Content-Type: application/json' \
   -d '{"LibraryOptions":{"PathInfos":[{"Path":"/media/movies"}]}}'
 
 step "Jellyfin finds the video"
 movie_count() {
-  [ "$(curl -fsS "$JELLYFIN/Items?Recursive=true&IncludeItemTypes=Movie" -H "X-Emby-Token: $token" |
+  [ "$(curl -fsS "$JELLYFIN/Items?Recursive=true&IncludeItemTypes=Movie" -H "Authorization: MediaBrowser Token=\"$token\"" |
     jq .TotalRecordCount)" -ge 1 ]
 }
 wait_for 180 "Jellyfin to index the test movie" movie_count
-item="$(curl -fsS "$JELLYFIN/Items?Recursive=true&IncludeItemTypes=Movie" -H "X-Emby-Token: $token" |
+item="$(curl -fsS "$JELLYFIN/Items?Recursive=true&IncludeItemTypes=Movie" -H "Authorization: MediaBrowser Token=\"$token\"" |
   jq -r '.Items[0].Id')"
 
 step "Jellyfin serves the video (direct play, first kilobyte)"
 head_file="$(mktemp)"
-code="$(curl -sS -o "$head_file" -w '%{http_code}' -H "X-Emby-Token: $token" -H 'Range: bytes=0-1023' \
+code="$(curl -sS -o "$head_file" -w '%{http_code}' -H "Authorization: MediaBrowser Token=\"$token\"" -H 'Range: bytes=0-1023' \
   "$JELLYFIN/Videos/$item/stream?static=true&mediaSourceId=$item")"
 { [ "$code" = "206" ] || [ "$code" = "200" ]; } || fail "stream request returned HTTP $code"
 [ "$(stat -c %s "$head_file")" -gt 0 ] || fail "stream returned no bytes"
