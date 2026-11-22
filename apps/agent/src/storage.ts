@@ -251,6 +251,21 @@ async function readFolderMappings(deps: Deps): Promise<FolderMapping[]> {
   return mappings;
 }
 
+// A fresh drive's UUID link can lag behind mkfs, so the first start may fail with a dependency error
+// even though `enable --now` reported success. Starting again a moment later works.
+async function waitUntilActive(deps: Deps, unit: string) {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      await deps.run('systemctl', ['is-active', '--quiet', unit]);
+      return;
+    } catch {
+      await sleep(1000);
+      await systemctl(deps, 'start', unit).catch(() => {});
+    }
+  }
+  await deps.run('systemctl', ['is-active', '--quiet', unit]);
+}
+
 export async function mountVolume(deps: Deps, uuid: string, label: string) {
   const { disk, volume } = findVolume(await listDisks(deps), uuid);
   if (disk.isSystem) {
@@ -302,6 +317,7 @@ export async function mountVolume(deps: Deps, uuid: string, label: string) {
   try {
     await systemctl(deps, 'daemon-reload');
     await systemctl(deps, 'enable', '--now', unit);
+    await waitUntilActive(deps, unit);
   } catch {
     await deps.fs.removeFile(unitPath);
     await systemctl(deps, 'daemon-reload').catch(() => {});

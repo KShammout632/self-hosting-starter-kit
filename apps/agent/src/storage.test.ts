@@ -333,6 +333,20 @@ describe('disk.mount', () => {
     expect(host.files.size).toBe(0);
   });
 
+  it('starts the mount again when the first try left it inactive', async () => {
+    const host = makeHost();
+    const run = host.deps.run;
+    let checks = 0;
+    host.deps.run = async (file, args, options) => {
+      if (file === 'systemctl' && args[0] === 'is-active' && checks++ === 0) {
+        throw new Error('inactive');
+      }
+      return run(file, args, options);
+    };
+    expect(await ask(host.deps, mount())).toMatchObject({ ok: true });
+    expect(host.commands).toContainEqual(['systemctl', 'start', 'mnt-media1.mount']);
+  });
+
   it('says the drive is missing when it is not plugged in', async () => {
     const host = makeHost();
     expect(await ask(host.deps, mount('99999999'))).toMatchObject({

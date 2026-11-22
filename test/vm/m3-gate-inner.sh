@@ -145,6 +145,8 @@ mountpoint -q "/mnt/$LABEL" || {
   journalctl -u "$(unit_name "/mnt/$LABEL")" --no-pager -n 30 || true
   cat "/etc/systemd/system/$(unit_name "/mnt/$LABEL")" || true
   lsblk -o NAME,TYPE,FSTYPE,UUID,MOUNTPOINTS || true
+  systemctl list-units --all 'dev-disk-by*' --no-pager || true
+  ls -l /dev/disk/by-uuid || true
   findmnt -R /mnt || true
   fail "/mnt/$LABEL is not mounted"
 }
