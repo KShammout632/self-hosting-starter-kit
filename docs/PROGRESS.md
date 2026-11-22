@@ -8,7 +8,7 @@ Each session updates this file before opening its pull request. Newest entry fir
 | --- | --- | --- |
 | M0 Foundations | Done, exit gate passed in CI (`agent-gate`) | `m0-foundations` |
 | M1 First slice: installer + Jellyfin | Done, exit gate passed in CI (`install-gate`) | `m1-installer-jellyfin` |
-| M2 Dashboard core | Built, waiting for the `dashboard-gate` CI job to pass on the pull request | `m2-dashboard-core` |
+| M2 Dashboard core | Done, exit gate passed in CI (`dashboard-gate`) | `m2-dashboard-core` |
 | M3 Storage | Not started | |
 | M4 All services, wizard, remote access | Not started | |
 | M5 Updates and docs | Not started | |
@@ -16,7 +16,7 @@ Each session updates this file before opening its pull request. Newest entry fir
 
 ## Next up
 
-Get the M2 exit gate (`dashboard-gate` in CI) green, merge, then start M3 (storage).
+Start M3 (storage).
 
 ## Later
 
@@ -52,9 +52,9 @@ Template for each entry:
 ### 2026-11-22: M2 Dashboard core
 - Built: the dashboard API (`apps/api`, Fastify): setup code and one admin account (argon2id), login with a 7 day session cookie, CSRF token on every change, lockout after 10 wrong passwords, password re-entry after 15 minutes for uninstall, an audit table in SQLite, and service endpoints. Install, start, stop, restart, update and uninstall run in the background and the page follows them over Server-Sent Events (`/api/status/stream`). A poller refreshes every 15 seconds and works out Online, Starting, Having problems, Offline, Error or Not installed. Live logs stream over SSE (`/api/services/:name/logs?follow=1`), with a download endpoint. An error detector counts problem lines and maps known ones to plain-English hints (`packages/shared/src/logs.ts`). The web app (`apps/web`, React, Tailwind, shadcn style components, TanStack Query): setup, sign in, Home with server health and service cards, and a service page with actions, getting-started tips, suggestions and a live log viewer. Agent changes: `confirm.issue` (the agent issues and verifies confirm tokens), `logs.stream` with `follow`, container start times and the health URL check in `service.status`, and `system.info` on `systeminformation` (CPU load, disk, temperature). Installer: builds and starts the dashboard container, prints a setup code once, `selfhost reset-password`, and `uninstall.sh` removes the dashboard. 108 unit and integration tests, 14 Playwright UI tests, and the `dashboard-gate` CI job.
 - Decisions made (and why): The agent issues confirm tokens (single use, five minutes, bound to one action and target) instead of sharing a secret with the dashboard, so no key file is needed. The agent runs the service health check on the host (`service.status` returns `http`), because a container reaching host ports is blocked by ufw. The setup code is stored as a SHA-256 hash in `/var/lib/selfhost/setup-code` and is printed on the terminal only, never to the install log. `selfhost reset-password` writes a new code file, and the dashboard treats a code file next to an existing admin as a password reset (it signs everyone out). Followed logs use `spawn` with an argument array and no shell instead of `execFile`, because `execFile` keeps all output in memory. better-sqlite3 is pinned to 12.11.1 because 13.x has no Windows prebuilt binary for Node 22 (the dev machine is Windows). The two native modules stay outside the API bundle and are installed in the dashboard image. Mobile layout was checked in a 375 pixel wide test.
-- Not tested / needs the owner to check: the `dashboard-gate` job (installer plus a real browser setting up the dashboard and running Jellyfin) has not run yet, since the dev machine is Windows without Docker. The dashboard Dockerfile and compose file, the installer changes and `reset-password` on Linux are covered only by that job. Not covered at all: real hardware, a phone browser, the dashboard behind `tailscale serve`, and a Multipass VM run. Unit and UI tests ran on Windows (named pipes in place of the Unix socket, Edge for Playwright).
+- Not tested / needs the owner to check: the `dashboard-gate` job passes on a GitHub Ubuntu 24.04 runner (installer run twice, dashboard locked down, a browser sets up the dashboard and installs, stops, starts, restarts and removes Jellyfin, then a restart, `reset-password` and `uninstall.sh`). It found two problems before passing: systemd recreated `/run/selfhost` on every agent restart, which cut the dashboard off from the agent (fixed with `RuntimeDirectoryPreserve=yes`), and a test selector. Not covered: real hardware, a phone browser, the dashboard behind `tailscale serve`, and a Multipass VM run. Unit and UI tests ran on Windows (named pipes in place of the Unix socket, Edge for Playwright).
 - Known issues: none known beyond the Later list.
-- Next: get the gate green, then M3.
+- Next: M3.
 
 ### 2026-11-22: M1 First slice: installer + Jellyfin
 - Built: `install.sh` (preflight, base packages and automatic security updates, Docker from Docker's apt repo, Tailscale installed but not logged in, Intel video driver, `selfhost` user and folders, bundled Node and agent, systemd unit, ufw, log to `/var/log/selfhost-install.log`) and `uninstall.sh` (keeps settings and media unless asked, separately). Agent actions `service.install`, `start`, `stop`, `restart`, `update`, `uninstall`, `logs.stream` and `logs.download`, using a new `HostFs` layer so dry-run and tests never touch disk. Compose templates are now bundled into `agent.cjs` (tsup text loader, plus a small plugin in `vitest.config.ts`). The `selfhost` command (`deploy/selfhost-cli.mjs`, installed as `/usr/local/bin/selfhost`) is a thin client for the agent. `test/vm/m1-gate-inner.sh` and `m1-gate.sh`, and an `install-gate` CI job.
