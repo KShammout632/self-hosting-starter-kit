@@ -28,6 +28,9 @@ export const serviceManifest = z
     libraryFolders: z
       .array(z.object({ folder: libraryFolder, access: z.enum(['ro', 'rw']) }).strict())
       .min(1),
+    // Folders under /opt/selfhost/config/<name> that containers write to. The agent creates them
+    // owned by the selfhost user, otherwise Docker creates them as root and the container cannot write.
+    configDirs: z.array(z.string().regex(/^[a-z][a-z0-9-]*$/)).default([]),
     health: z.object({ path: z.string().regex(/^\/[A-Za-z0-9._/-]*$/) }).strict(),
     gpu: z.object({ intel: z.boolean() }).strict(),
     firstLoginTips: z.array(z.string().min(1)).min(1),

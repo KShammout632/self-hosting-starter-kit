@@ -5,12 +5,13 @@ export const jellyfinManifest = serviceManifest.parse({
   displayName: 'Jellyfin',
   description: 'Stream your movies, shows and home videos to any device.',
   ports: { lan: 8096, remote: 8920 },
-  images: [{ container: 'jellyfin', repository: 'jellyfin/jellyfin', tag: '10.10.7' }],
+  images: [{ container: 'jellyfin', repository: 'jellyfin/jellyfin', tag: '12.4' }],
   libraryFolders: [
     { folder: 'movies', access: 'ro' },
     { folder: 'tv', access: 'ro' },
     { folder: 'home-videos', access: 'ro' },
   ],
+  configDirs: ['config', 'cache'],
   health: { path: '/health' },
   gpu: { intel: true },
   firstLoginTips: [

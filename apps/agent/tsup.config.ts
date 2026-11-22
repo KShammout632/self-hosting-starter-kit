@@ -6,6 +6,7 @@ export default defineConfig({
   platform: 'node',
   target: 'node22',
   clean: true,
+  loader: { '.tmpl': 'text' },
   // One self-contained file, so the target machine needs only the bundled Node binary.
   noExternal: [/.*/],
   esbuildOptions(options) {

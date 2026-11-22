@@ -7,7 +7,7 @@ export interface DockerClient {
 }
 
 // Each service is a compose project named selfhost-<service>.
-const projectName = (service: ServiceName) => `selfhost-${service}`;
+export const projectName = (service: ServiceName) => `selfhost-${service}`;
 
 function parseHealth(status: string): ContainerSummary['health'] {
   if (status.includes('(unhealthy)')) return 'unhealthy';
