@@ -119,8 +119,6 @@ jobs:
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # The runner's kernel may not offer scsi_debug. Remove this line once the job is known to pass.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
