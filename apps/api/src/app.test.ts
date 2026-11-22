@@ -1,4 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentRequestError } from './agent-client';
 import { LOCKOUT_MS, MAX_FAILURES, REAUTH_AFTER_MS } from './auth';
@@ -410,5 +412,29 @@ describe('streams', () => {
     });
     expect(response.headers['content-disposition']).toContain('jellyfin-logs.txt');
     expect(response.body).toBe('hello\n');
+  });
+});
+
+describe('web app files', () => {
+  it('serves the page for app routes but a real 404 for missing files', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'selfhost-web-'));
+    mkdirSync(join(dir, 'assets'));
+    writeFileSync(join(dir, 'index.html'), '<div id="root"></div>');
+    writeFileSync(join(dir, 'assets', 'app.js'), 'console.log(1)');
+
+    const t = await createTestApp({ webDir: dir });
+    current = t;
+
+    const route = await t.app.inject('/services/jellyfin');
+    expect(route.statusCode).toBe(200);
+    expect(route.headers['content-type']).toContain('text/html');
+
+    const asset = await t.app.inject('/assets/app.js');
+    expect(asset.statusCode).toBe(200);
+    expect(asset.headers['content-type']).toContain('javascript');
+
+    const missing = await t.app.inject('/assets/gone.js');
+    expect(missing.statusCode).toBe(404);
+    expect(missing.headers['content-type']).not.toContain('text/html');
   });
 });

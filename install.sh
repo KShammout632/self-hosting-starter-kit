@@ -223,6 +223,8 @@ install_dashboard() {
   install -d -m 0755 "$dir"
   rm -rf "$dir/web"
   cp -r "$BUNDLE/dashboard/web" "$dir/web"
+  # The dashboard runs as an unprivileged user, so never trust the permissions the files arrived with.
+  chmod -R u=rwX,go=rX "$dir/web"
   for file in api.js package.json Dockerfile compose.yml; do
     install -m 0644 "$BUNDLE/dashboard/$file" "$dir/$file"
   done

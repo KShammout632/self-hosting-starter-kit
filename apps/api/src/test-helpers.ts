@@ -98,7 +98,7 @@ export function createFakeAgent(): FakeAgent {
   return agent;
 }
 
-export async function createTestApp(options: { now?: () => number; seedAdmin?: boolean } = {}) {
+export async function createTestApp(options: { now?: () => number; webDir?: string | null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'selfhost-api-'));
   const setupCodeFile = join(dir, 'setup-code');
   writeFileSync(setupCodeFile, sha256('ABCD2345') + '\n');
@@ -111,7 +111,14 @@ export async function createTestApp(options: { now?: () => number; seedAdmin?: b
     agent,
     now: options.now,
   });
-  const deps: AppDeps = { agent, auth, audit, monitor, webDir: null, now: options.now };
+  const deps: AppDeps = {
+    agent,
+    auth,
+    audit,
+    monitor,
+    webDir: options.webDir ?? null,
+    now: options.now,
+  };
   const app = await buildApp(deps);
   return { app, agent, auth, audit, monitor, db, setupCodeFile };
 }

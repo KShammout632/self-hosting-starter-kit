@@ -8,6 +8,9 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY api.js ./
 COPY web ./web
+# The app runs as an unprivileged user, so the files must be readable whatever permissions they had
+# in the build folder.
+RUN chmod -R a+rX /app/web
 
 ENV NODE_ENV=production \
     SELFHOST_WEB_DIR=/app/web

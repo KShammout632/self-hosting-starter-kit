@@ -436,7 +436,11 @@ export async function buildApp(deps: AppDeps) {
   const serveWeb = deps.webDir !== null && existsSync(deps.webDir);
 
   app.setNotFoundHandler(async (request, reply) => {
-    if (request.url.startsWith('/api/') || !serveWeb || request.method !== 'GET') {
+    const path = request.url.split('?')[0] as string;
+    // A missing file must be a real 404. Answering with the page would make the browser reject it
+    // as a script with the wrong type and show a blank screen.
+    const looksLikeFile = /\.[A-Za-z0-9]+$/.test(path);
+    if (path.startsWith('/api/') || !serveWeb || request.method !== 'GET' || looksLikeFile) {
       return sendError(reply, 404, 'not_found', 'Not found.');
     }
     return reply.sendFile('index.html');

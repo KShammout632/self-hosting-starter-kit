@@ -20,6 +20,7 @@ install -m 0644 deploy/dashboard.Dockerfile "$OUT/dashboard/Dockerfile"
 install -m 0644 deploy/dashboard.compose.yml "$OUT/dashboard/compose.yml"
 rm -rf "$OUT/dashboard/web"
 cp -r apps/web/dist "$OUT/dashboard/web"
+chmod -R u=rwX,go=rX "$OUT/dashboard/web"
 
 # The image installs only the native modules the API bundle leaves out, at the versions the API pins.
 node -e '
