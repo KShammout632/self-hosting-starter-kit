@@ -35,13 +35,13 @@ test('set up, install Jellyfin, stop it, start it, read its logs, remove it', as
   await expect(logs).not.toContainText('No log lines yet.', { timeout: 60_000 });
   await expect(logs).toContainText(/\S/);
 
-  await page.getByRole('button', { name: 'Stop' }).click();
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(page.locator('main')).toContainText('Offline', { timeout: 3 * 60_000 });
 
-  await page.getByRole('button', { name: 'Start' }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.locator('main')).toContainText('Online', { timeout: 5 * 60_000 });
 
-  await page.getByRole('button', { name: 'Restart' }).click();
+  await page.getByRole('button', { name: 'Restart', exact: true }).click();
   await expect(page.locator('main')).toContainText('Online', { timeout: 5 * 60_000 });
 
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
