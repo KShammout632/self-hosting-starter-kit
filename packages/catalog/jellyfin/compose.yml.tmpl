@@ -1,0 +1,23 @@
+name: selfhost-jellyfin
+services:
+  jellyfin:
+    image: {{IMAGE_JELLYFIN}}
+    container_name: selfhost-jellyfin
+    restart: unless-stopped
+    user: "{{PUID}}:{{PGID}}"
+    ports:
+      - "{{LAN_PORT}}:8096"
+    environment:
+      TZ: "{{TZ}}"
+    volumes:
+      - {{CONFIG_DIR}}/config:/config
+      - {{CONFIG_DIR}}/cache:/cache
+      - {{MOVIES_DIR}}:/media/movies:ro
+      - {{TV_DIR}}:/media/tv:ro
+      - {{HOME_VIDEOS_DIR}}:/media/home-videos:ro
+{{#if GPU}}
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "{{RENDER_GID}}"
+{{/if}}
