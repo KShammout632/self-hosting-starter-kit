@@ -26,3 +26,22 @@ jobs:
           node apps/agent/dist/agent.cjs --dry-run --socket /tmp/agent.sock &
           sleep 1
           node test/vm/check-agent.mjs /tmp/agent.sock --dry-run
+
+  # Runs on a real Ubuntu 24.04 machine with systemd and Docker, so it also covers the M0 exit gate.
+  agent-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install the agent as a systemd service and check it
+        run: |
+          mkdir /tmp/gate
+          cp apps/agent/dist/agent.cjs deploy/selfhost-agent.service test/vm/check-agent.mjs /tmp/gate/
+          sudo bash test/vm/m0-gate-inner.sh /tmp/gate

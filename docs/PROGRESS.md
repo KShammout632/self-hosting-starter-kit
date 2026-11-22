@@ -6,7 +6,7 @@ Each session updates this file before opening its pull request. Newest entry fir
 
 | Milestone | Status | Branch / PR |
 | --- | --- | --- |
-| M0 Foundations | Done except the VM gate (owner to run) | `m0-foundations` |
+| M0 Foundations | Done, exit gate passed in CI (`agent-gate`) | `m0-foundations` |
 | M1 First slice: installer + Jellyfin | Not started | |
 | M2 Dashboard core | Not started | |
 | M3 Storage | Not started | |
@@ -16,7 +16,7 @@ Each session updates this file before opening its pull request. Newest entry fir
 
 ## Next up
 
-Run `test/vm/m0-gate.sh` on a machine with Multipass to close the M0 exit gate, then start M1: install.sh (preflight, Docker, Tailscale, folders, systemd agent), agent service actions, and a CLI helper for Jellyfin.
+Start M1: install.sh (preflight, Docker, Tailscale, folders, systemd agent), agent service actions, and a CLI helper for Jellyfin.
 
 ## Later
 
@@ -44,9 +44,9 @@ Template for each entry:
 ### 2026-11-22: M0 Foundations
 - Built: pnpm workspace (shared, catalog, agent, plus empty web and api placeholders); Zod request schemas for all 28 v1 agent actions with strict argument types; newline-delimited JSON protocol with error codes; catalog manifest schema, template renderer and a Jellyfin entry; agent with socket server, per-service lock, confirm-token presence check, execFile-only runner, `--dry-run`, and working `agent.version`, `system.info`, `service.status` and `tailscale.status`; systemd unit; CI workflow; VM gate script. 39 unit and integration tests.
 - Decisions made (and why): TypeScript pinned to 6.x (typescript-eslint does not support 7). The agent bundles to one CommonJS file with ssh2 stubbed out, because dockerode pulls in ssh2's native modules and the agent only uses the local Docker socket. Not-yet-built actions are valid in the schema but return `not_implemented`. Added `tailscale.status` to the M0 handlers at the owner's request.
-- Not tested / needs the owner to check: `test/vm/m0-gate.sh` has never been run (no VM on the dev machine). Socket mode 0660 and root:selfhost ownership, the systemd unit, real Docker via dockerode, and real `tailscale status` output are untested. Tests ran on Windows with a named pipe in place of a Unix socket. The GitHub Actions workflow has not run yet.
+- Not tested / needs the owner to check: the M0 gate (`test/vm/m0-gate-inner.sh`) passes in the `agent-gate` CI job on an Ubuntu 24.04 runner, which covers the systemd unit, socket permissions and real Docker. `test/vm/m0-gate.sh` (Multipass) has not been run, since Multipass did not work on the dev machine. Real `tailscale status` output is untested because Tailscale is not installed on the runner. Unit tests ran on Windows with a named pipe in place of a Unix socket.
 - Known issues: none known.
-- Next: run the VM gate, then M1.
+- Next: M1.
 
 ### 2026-11-22: Planning
 - Built: `docs/PLAN.md`, `CLAUDE.md`, this file.

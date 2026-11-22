@@ -54,6 +54,6 @@ Run from the repo root (pnpm 9, Node 22; `corepack enable` provides pnpm):
 - `pnpm lint`, `pnpm format:check` (`pnpm format` to fix), `pnpm typecheck`, `pnpm test`
 - `pnpm build`: bundles the agent to `apps/agent/dist/agent.cjs`
 - `pnpm --filter @selfhost/agent dev`: run the agent in dry-run mode on a local socket
-- `bash test/vm/m0-gate.sh`: M0 exit gate on a fresh Ubuntu 24.04 Multipass VM (needs `pnpm build` first)
+- `bash test/vm/m0-gate.sh`: M0 exit gate on a fresh Ubuntu 24.04 Multipass VM (needs `pnpm build` first). CI runs the same checks in the `agent-gate` job.
 
 TypeScript is pinned to 6.x because typescript-eslint does not support 7 yet.
