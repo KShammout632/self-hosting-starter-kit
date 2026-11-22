@@ -125,6 +125,16 @@ export SELFHOST_BUNDLE_DIR="$BUNDLE" SELFHOST_SKIP_RESOURCE_CHECKS=1
 bash "$BUNDLE/install.sh"
 for tool in parted rsync smartctl lsblk mkfs.ext4 wipefs; do command -v "$tool" >/dev/null || fail "$tool was not installed"; done
 
+# GitHub runners ship an fstab entry for /mnt that points at a device that does not exist. systemd
+# makes every /mnt/<name> mount depend on its parent mount, so they would all fail. A normal
+# Ubuntu server has no such entry.
+if grep -qE '^[^#]*[[:space:]]/mnt[[:space:]]' /etc/fstab; then
+  step "Remove the runner's broken /mnt entry from fstab"
+  sed -i -E '/^[^#]*[[:space:]]\/mnt[[:space:]]/d' /etc/fstab
+  systemctl daemon-reload
+  systemctl stop mnt.mount >/dev/null 2>&1 || true
+fi
+
 find_spare_disk
 echo "Using /dev/$DEVICE"
 
