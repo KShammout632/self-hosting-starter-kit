@@ -36,7 +36,10 @@ fail() {
   exit 1
 }
 
-call() { node "$HERE/agent-call.mjs" "$1"; }
+# The kit ships its own Node, so the machine under test needs no Node of its own.
+NODE=/opt/selfhost/agent/node
+[ -x "$NODE" ] || NODE="$(command -v node || true)"
+call() { "$NODE" "$HERE/agent-call.mjs" "$1"; }
 ok() { jq -e '.ok == true' >/dev/null; }
 refused() { jq -e '.ok == false and .error.code == "refused"' >/dev/null; }
 
