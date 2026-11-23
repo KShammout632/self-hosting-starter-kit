@@ -43,6 +43,7 @@ const setupBody = z.object({
   code: z.string().min(1).max(32),
   password: z.string().min(10).max(200),
 });
+const wizardBody = z.object({ skipped: z.boolean() });
 const loginBody = z.object({ password: z.string().min(1).max(200) });
 const uninstallBody = z.object({
   deleteData: z.boolean(),
@@ -153,6 +154,7 @@ export async function buildApp(deps: AppDeps) {
       state: 'logged_in',
       csrfToken: request.session.csrfToken,
       reauthRequired: now() - request.session.lastAuthAt > REAUTH_AFTER_MS,
+      wizardComplete: auth.wizardComplete(),
     };
   };
 
@@ -202,6 +204,7 @@ export async function buildApp(deps: AppDeps) {
       state: 'logged_in',
       csrfToken: startSession(request, reply),
       reauthRequired: false,
+      wizardComplete: auth.wizardComplete(),
     } satisfies SessionInfo;
   });
 
@@ -223,6 +226,7 @@ export async function buildApp(deps: AppDeps) {
       state: 'logged_in',
       csrfToken: startSession(request, reply),
       reauthRequired: false,
+      wizardComplete: auth.wizardComplete(),
     } satisfies SessionInfo;
   });
 
@@ -264,6 +268,21 @@ export async function buildApp(deps: AppDeps) {
         return sendError(reply, 401, 'invalid_credentials', 'That password is not right.');
       }
       auth.touchAuth((request.session as NonNullable<FastifyRequest['session']>).token);
+      return { ok: true };
+    });
+
+    secured.post('/api/wizard/complete', async (request, reply) => {
+      const body = wizardBody.safeParse(request.body);
+      if (!body.success) {
+        return sendError(reply, 400, 'invalid_input', 'Something is missing from that request.');
+      }
+      auth.completeWizard();
+      audit.record({
+        actor: 'admin',
+        event: 'wizard.complete',
+        outcome: 'ok',
+        detail: body.data.skipped ? 'skipped' : undefined,
+      });
       return { ok: true };
     });
 

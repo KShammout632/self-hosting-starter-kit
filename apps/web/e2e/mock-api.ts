@@ -123,7 +123,12 @@ export interface MockState {
 
 export function newState(overrides: Partial<MockState> = {}): MockState {
   return {
-    session: { state: 'logged_in', csrfToken: 'csrf-test', reauthRequired: false },
+    session: {
+      state: 'logged_in',
+      csrfToken: 'csrf-test',
+      reauthRequired: false,
+      wizardComplete: true,
+    },
     remote: newRemote(),
     service: jellyfin(),
     agentReachable: true,
@@ -201,8 +206,17 @@ export async function mockApi(page: Page, state: MockState) {
           message: 'That password is not right.',
         });
       }
-      state.session = { state: 'logged_in', csrfToken: 'csrf-test', reauthRequired: false };
+      state.session = {
+        state: 'logged_in',
+        csrfToken: 'csrf-test',
+        reauthRequired: false,
+        wizardComplete: path === '/api/login',
+      };
       return json(route, 200, state.session);
+    }
+    if (path === '/api/wizard/complete' && method === 'POST') {
+      if (state.session.state === 'logged_in') state.session.wizardComplete = true;
+      return json(route, 200, { ok: true });
     }
     if (path === '/api/logout') {
       state.session = { state: 'logged_out', setupAvailable: false };

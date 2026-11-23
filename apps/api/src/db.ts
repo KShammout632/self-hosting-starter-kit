@@ -32,6 +32,13 @@ const MIGRATIONS = [
      outcome TEXT NOT NULL,
      detail TEXT
    );`,
+  // A server that already has an admin predates the wizard and must not be sent into it.
+  `CREATE TABLE settings (
+     key TEXT PRIMARY KEY,
+     value TEXT NOT NULL
+   );
+   INSERT INTO settings (key, value)
+     SELECT 'wizard_complete', '1' WHERE EXISTS (SELECT 1 FROM admin);`,
 ];
 
 export function openDb(path: string): Db {

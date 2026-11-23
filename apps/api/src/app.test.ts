@@ -65,6 +65,54 @@ describe('setup and login', () => {
     expect(info.json()).toMatchObject({ state: 'logged_in', reauthRequired: false });
   });
 
+  it('keeps the setup guide open until it is finished or skipped, and remembers that', async () => {
+    const t = await make();
+    const login = await setupAndLogin(t);
+    const wizardComplete = async () =>
+      (await t.app.inject({ url: '/api/session', headers: { cookie: login.cookie } })).json()
+        .wizardComplete;
+
+    expect(await wizardComplete()).toBe(false);
+    expect((await post(t, '/api/wizard/complete', { skipped: true })).statusCode).toBe(401);
+    expect(
+      (await post(t, '/api/wizard/complete', { skipped: true }, { cookie: login.cookie }))
+        .statusCode,
+    ).toBe(403);
+    expect((await post(t, '/api/wizard/complete', {}, login.headers)).statusCode).toBe(400);
+    expect(await wizardComplete()).toBe(false);
+
+    expect(
+      (await post(t, '/api/wizard/complete', { skipped: false }, login.headers)).statusCode,
+    ).toBe(200);
+    expect(await wizardComplete()).toBe(true);
+    expect(t.audit.recent(5).map((row) => row.event)).toContain('wizard.complete');
+
+    const again = toLogin(await post(t, '/api/login', { password: PASSWORD }));
+    expect(again.csrf).toBeTruthy();
+    expect(
+      (await t.app.inject({ url: '/api/session', headers: { cookie: again.cookie } })).json(),
+    ).toMatchObject({ wizardComplete: true });
+  });
+
+  it('treats a server that already had an admin before the wizard existed as finished', async () => {
+    const { openDb } = await import('./db');
+    const { createAuth } = await import('./auth');
+    const path = join(mkdtempSync(join(tmpdir(), 'selfhost-db-')), 'selfhost.db');
+
+    const old = openDb(path);
+    old.exec('DROP TABLE settings');
+    old.pragma('user_version = 1');
+    old.prepare('INSERT INTO admin (id, password_hash, updated_at) VALUES (1, ?, ?)').run('x', 1);
+    old.close();
+
+    const upgraded = openDb(path);
+    expect(createAuth({ db: upgraded, setupCodeFile: '/none' }).wizardComplete()).toBe(true);
+    upgraded.close();
+
+    const fresh = openDb(':memory:');
+    expect(createAuth({ db: fresh, setupCodeFile: '/none' }).wizardComplete()).toBe(false);
+  });
+
   it('locks out after too many wrong passwords, then unlocks', async () => {
     let time = 1_000_000;
     const t = await make({ now: () => time });

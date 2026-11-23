@@ -27,6 +27,8 @@ export interface Auth {
   checkPassword(password: string): Promise<boolean>;
   setPassword(password: string): Promise<void>;
   finishSetup(): void;
+  wizardComplete(): boolean;
+  completeWizard(): void;
   createSession(): { token: string; csrfToken: string };
   getSession(token: string | undefined): SessionRow | null;
   touchAuth(token: string): void;
@@ -96,6 +98,15 @@ export function createAuth(options: { db: Db; setupCodeFile: string; now?: () =>
 
     finishSetup() {
       rmSync(setupCodeFile, { force: true });
+    },
+
+    wizardComplete: () =>
+      db.prepare("SELECT 1 FROM settings WHERE key = 'wizard_complete'").get() !== undefined,
+
+    completeWizard() {
+      db.prepare(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('wizard_complete', '1')",
+      ).run();
     },
 
     createSession() {
