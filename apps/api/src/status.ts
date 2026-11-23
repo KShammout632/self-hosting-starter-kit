@@ -1,4 +1,10 @@
-import type { ContainerSummary, ServiceStatus, ServiceStatusResult } from '@selfhost/shared';
+import {
+  LIBRARY_FOLDER_LABELS,
+  type ContainerSummary,
+  type LibraryFolder,
+  type ServiceStatus,
+  type ServiceStatusResult,
+} from '@selfhost/shared';
 
 export const STARTING_WINDOW_MS = 3 * 60_000;
 
@@ -7,6 +13,7 @@ export interface StatusInput {
   containers: ContainerSummary[];
   // Null when the check was not run because the containers are not all running.
   httpOk: boolean | null;
+  missingFolders?: LibraryFolder[];
   now: number;
   // Plain-English reason the last install, start or update failed, if it did.
   lastFailure: string | null;
@@ -24,8 +31,20 @@ function newestStart(containers: ContainerSummary[]): number | null {
   return times.length > 0 ? Math.max(...times) : null;
 }
 
+const joinNames = (names: string[]) =>
+  names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+
 export function computeStatus(input: StatusInput): StatusResult {
-  const { containerState, containers, httpOk, now, lastFailure } = input;
+  const { containerState, containers, httpOk, now, lastFailure, missingFolders = [] } = input;
+
+  // A running service whose drive has gone would write into an empty folder on the system drive.
+  if (missingFolders.length > 0 && ['running', 'partial', 'restarting'].includes(containerState)) {
+    const names = missingFolders.map((folder) => LIBRARY_FOLDER_LABELS[folder].toLowerCase());
+    return {
+      status: 'error',
+      message: `The drive holding your ${joinNames(names)} is not connected. Plug it back in, mount it on the Storage page, then restart this service.`,
+    };
+  }
 
   switch (containerState) {
     case 'not_found':

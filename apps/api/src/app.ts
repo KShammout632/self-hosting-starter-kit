@@ -16,6 +16,7 @@ import { AgentRequestError, type AgentCall, type AgentClient } from './agent-cli
 import type { AuditLog } from './audit';
 import { REAUTH_AFTER_MS, SESSION_TTL_MS, type Auth } from './auth';
 import type { StatusMonitor } from './monitor';
+import { registerStorageRoutes } from './storage-routes';
 
 const COOKIE = 'selfhost_session';
 const ACTION_TIMEOUT_MS = 25 * 60_000;
@@ -351,6 +352,8 @@ export async function buildApp(deps: AppDeps) {
         );
       });
     });
+
+    registerStorageRoutes(secured, { agent, audit, monitor, now, sendError });
 
     const openEventStream = (request: FastifyRequest, reply: FastifyReply) => {
       reply.hijack();

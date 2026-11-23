@@ -3,6 +3,7 @@ import {
   AGENT_ACTIONS,
   parseRequest,
   requiresConfirmToken,
+  lockKey,
   serviceLockKey,
   agentRequest,
 } from './index';
@@ -78,7 +79,7 @@ describe('request helpers', () => {
   it('flags destructive actions that need a confirm token', () => {
     expect(
       requiresConfirmToken(
-        request({ id: 'a', action: 'disk.format', uuid: 'ABCD-1234', label: 'media1' }),
+        request({ id: 'a', action: 'disk.format', device: 'sdb', label: 'media1' }),
       ),
     ).toBe(true);
     expect(
@@ -91,6 +92,21 @@ describe('request helpers', () => {
         request({ id: 'a', action: 'service.uninstall', service: 'immich', deleteData: false }),
       ),
     ).toBe(false);
+  });
+
+  it('takes one storage lock for every disk and folder change', () => {
+    const mount = request({ id: 'a', action: 'disk.mount', uuid: 'ABCD-1234', label: 'media1' });
+    expect(lockKey(mount)).toBe('storage');
+    expect(lockKey(request({ id: 'a', action: 'disk.list' }))).toBe(null);
+  });
+
+  it('only formats whole disks named by the kernel', () => {
+    const format = (device: string) =>
+      parse({ id: 'a1', action: 'disk.format', device, label: 'media1' }).ok;
+    for (const device of ['sdb', 'nvme0n1', 'vdb']) expect(format(device), device).toBe(true);
+    for (const device of ['/dev/sdb', 'sdb1', 'sdb; reboot', '../sdb', 'loop0']) {
+      expect(format(device), device).toBe(false);
+    }
   });
 
   it('locks only actions that change a service', () => {

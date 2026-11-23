@@ -131,6 +131,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         containerState: result.state,
         containers: result.containers,
         httpOk: result.http?.ok ?? null,
+        missingFolders: result.missingFolders,
         now: now(),
         lastFailure: state.lastFailure,
       });

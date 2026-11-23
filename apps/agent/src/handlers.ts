@@ -2,7 +2,7 @@ import os from 'node:os';
 import { getManifest } from '@selfhost/catalog';
 import si from 'systeminformation';
 import {
-  filesystemUuid,
+  deviceName,
   serviceName,
   type AgentAction,
   type AgentRequest,
@@ -20,6 +20,8 @@ import { AgentError } from './errors';
 import type { HttpChecker, LineStreamer, Runner } from './exec';
 import type { HostFs, Paths } from './host';
 import { serviceHandlers } from './service-handlers';
+import { missingFolders } from './storage';
+import { storageHandlers } from './storage-handlers';
 
 export interface Deps {
   dryRun: boolean;
@@ -70,6 +72,7 @@ const parseTailscale = (stdout: string): TailscaleStatusResult => {
 
 export const handlers: Handlers = {
   ...serviceHandlers,
+  ...storageHandlers,
 
   async 'agent.version'(_request, deps) {
     const data: AgentVersionResult = { version: pkg.version, dryRun: deps.dryRun };
@@ -105,7 +108,7 @@ export const handlers: Handlers = {
     const validTarget =
       request.kind === 'service.uninstall'
         ? serviceName.safeParse(request.target).success
-        : filesystemUuid.safeParse(request.target).success;
+        : deviceName.safeParse(request.target).success;
     if (!validTarget) throw new AgentError('invalid_request', 'Request arguments are not valid.');
     const data: ConfirmIssueResult = {
       token: deps.confirmTokens.issue(request.kind, request.target),
@@ -126,7 +129,14 @@ export const handlers: Handlers = {
             ),
           }
         : null;
-    const data: ServiceStatusResult = { service: request.service, state, containers, http };
+    const folders = manifest?.libraryFolders.map((entry) => entry.folder) ?? [];
+    const data: ServiceStatusResult = {
+      service: request.service,
+      state,
+      containers,
+      http,
+      missingFolders: await missingFolders(deps, folders).catch(() => []),
+    };
     return { data };
   },
 

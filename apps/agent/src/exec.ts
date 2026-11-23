@@ -32,6 +32,64 @@ const DRY_RUN_FIXTURES: Record<string, string> = {
   }),
   docker: 'selfhost-jellyfin-1  | 2026-11-22T09:30:00.000000000Z dry-run log line\n',
   id: '1001\n',
+  lsblk: JSON.stringify({
+    blockdevices: [
+      {
+        name: 'sda',
+        type: 'disk',
+        size: 256060514304,
+        model: 'Dry Run SSD',
+        tran: 'sata',
+        rm: false,
+        children: [
+          {
+            name: 'sda1',
+            type: 'part',
+            size: 256058417152,
+            fstype: 'ext4',
+            uuid: 'a1b2c3d4-0000-4000-8000-000000000001',
+            mountpoints: ['/'],
+            fsavail: 180000000000,
+            fsused: 60000000000,
+          },
+        ],
+      },
+      {
+        name: 'sdb',
+        type: 'disk',
+        size: 2000398934016,
+        model: 'Dry Run USB Drive',
+        tran: 'usb',
+        rm: false,
+        children: [
+          {
+            name: 'sdb1',
+            type: 'part',
+            size: 2000397795328,
+            fstype: 'ext4',
+            label: 'media1',
+            uuid: 'a1b2c3d4-0000-4000-8000-000000000002',
+            mountpoints: [null],
+            fsavail: 1500000000000,
+            fsused: 400000000000,
+          },
+        ],
+      },
+    ],
+  }),
+  df: 'Size Used Avail\n1000000000000 400000000000 600000000000\n',
+  smartctl: JSON.stringify({
+    smart_status: { passed: true },
+    temperature: { current: 34 },
+    power_on_time: { hours: 1200 },
+    ata_smart_attributes: { table: [{ id: 5, raw: { value: 0 } }] },
+  }),
+  systemctl: '',
+  wipefs: '',
+  parted: '',
+  udevadm: '',
+  'mkfs.ext4': '',
+  rsync: '',
 };
 
 export const dryRunRunner: Runner = async (file, args) => {

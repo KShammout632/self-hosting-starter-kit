@@ -1,15 +1,29 @@
-import { chown, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  chown,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 
 export interface Paths {
   servicesDir: string;
   configDir: string;
   renderDevice: string;
+  unitDir: string;
+  mountRoot: string;
 }
 
 export const DEFAULT_PATHS: Paths = {
   servicesDir: '/opt/selfhost/services',
   configDir: '/opt/selfhost/config',
   renderDevice: '/dev/dri/renderD128',
+  unitDir: '/etc/systemd/system',
+  mountRoot: '/mnt',
 };
 
 export interface Owner {
@@ -23,6 +37,10 @@ export interface HostFs {
   removeDir(path: string): Promise<void>;
   exists(path: string): Promise<boolean>;
   gidOf(path: string): Promise<number | null>;
+  readFile(path: string): Promise<string | null>;
+  removeFile(path: string): Promise<void>;
+  listDir(path: string): Promise<string[]>;
+  setOwner(path: string, owner: Owner, mode: number): Promise<void>;
 }
 
 export const realFs: HostFs = {
@@ -51,6 +69,19 @@ export const realFs: HostFs = {
       () => null,
     );
   },
+  async readFile(path) {
+    return readFile(path, 'utf8').catch(() => null);
+  },
+  async removeFile(path) {
+    await rm(path, { force: true });
+  },
+  async listDir(path) {
+    return readdir(path).catch(() => []);
+  },
+  async setOwner(path, owner, mode) {
+    await chown(path, owner.uid, owner.gid);
+    await chmod(path, mode);
+  },
 };
 
 export const dryRunFs: HostFs = {
@@ -68,5 +99,17 @@ export const dryRunFs: HostFs = {
   },
   async gidOf() {
     return null;
+  },
+  async readFile() {
+    return null;
+  },
+  async removeFile(path) {
+    console.error(JSON.stringify({ event: 'dry-run', would: ['remove', path] }));
+  },
+  async listDir() {
+    return [];
+  },
+  async setOwner(path) {
+    console.error(JSON.stringify({ event: 'dry-run', would: ['chown', path] }));
   },
 };

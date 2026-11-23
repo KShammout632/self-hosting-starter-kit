@@ -44,9 +44,7 @@ describe('confirm tokens', () => {
   });
 
   it('are long enough for the request schema', () => {
-    expect(createConfirmTokens().issue('disk.format', 'ABCD-1234')).toMatch(
-      /^[A-Za-z0-9_-]{32,128}$/,
-    );
+    expect(createConfirmTokens().issue('disk.format', 'sdb')).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
   });
 });
 

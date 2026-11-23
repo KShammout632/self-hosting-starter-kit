@@ -28,8 +28,10 @@ die() {
 
 # The setup code is printed on the original terminal only (fd 3), so it never lands in the log file.
 exec 3>&1
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Created first: tee creates the file in the background, so chmod right after could run before it exists.
+touch "$LOG_FILE"
 chmod 0600 "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
 trap 'printf "\nSomething went wrong. The full log is in %s\n" "$LOG_FILE" >&2' ERR
 
 export DEBIAN_FRONTEND=noninteractive
@@ -64,7 +66,7 @@ preflight() {
 install_base_packages() {
   say "Installing basic tools and automatic security updates"
   apt-get update -qq
-  apt_install ca-certificates curl gnupg jq smartmontools unattended-upgrades xz-utils ufw
+  apt_install ca-certificates curl gnupg jq smartmontools parted rsync unattended-upgrades xz-utils ufw
   cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";

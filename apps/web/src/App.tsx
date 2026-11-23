@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router';
+import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { SESSION_KEY, useSession } from '@/lib/session';
@@ -8,6 +8,7 @@ import { useStatus, useStatusStream } from '@/lib/status';
 import { LoginPage, SetupPage } from '@/pages/auth-pages';
 import { HomePage } from '@/pages/home-page';
 import { ServicePage } from '@/pages/service-page';
+import { StoragePage } from '@/pages/storage-page';
 
 function AgentBanner() {
   const status = useStatus();
@@ -51,7 +52,26 @@ function Layout() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <header className="flex items-center justify-between">
-        <span className="text-xl font-semibold">Home server</span>
+        <div className="flex items-center gap-4">
+          <span className="text-xl font-semibold">Home server</span>
+          <nav aria-label="Main" className="flex gap-3 text-sm">
+            {[
+              { to: '/', label: 'Home', end: true },
+              { to: '/storage', label: 'Storage', end: false },
+            ].map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.end}
+                className={({ isActive }) =>
+                  isActive ? 'font-semibold underline' : 'text-muted-foreground hover:underline'
+                }
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
         <Button variant="ghost" size="sm" onClick={logout}>
           Sign out
         </Button>
@@ -88,6 +108,7 @@ export function App() {
         <Route element={<RequireSession />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/services/:name" element={<ServicePage />} />
+          <Route path="/storage" element={<StoragePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
