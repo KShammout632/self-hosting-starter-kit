@@ -430,7 +430,7 @@ Build a thin, working slice first (installer plus Jellyfin), then add the dashbo
 | M2 Dashboard core | Login, setup code, service cards with live status; service detail page, live logs over SSE, error hints | Start, stop and read logs from the browser only |
 | M3 Storage | Disk list, mount by UUID, format ext4, folder mapping; SMART health, free space warnings, safe unplug | USB unplug and reboot test passes |
 | M4 All services, wizard, remote access | Built in three sub-milestones. M4a: Navidrome, Immich and Nextcloud catalog entries. M4b: Tailscale login, tailscale serve, QR codes. M4c: setup wizard | All four apps work on a phone over mobile data (closes after M4c) |
-| M5 Updates and docs | Kit and service updates with health-check rollback; pre-update snapshots, user guide and troubleshooting docs | Upgrade test passes and docs reviewed |
+| M5 Updates and docs | Built in three sub-milestones. M5a: service updates with pre-update snapshots and health-check rollback. M5b: kit updates, system updates, Settings page, release workflow. M5c: user guide and troubleshooting docs | Upgrade test passes and docs reviewed (closes after M5c) |
 | M6 Beta to 1.0 | Mini PC hardware testing, security review of the agent; public beta, fix feedback, tag 1.0 | 1.0 released |
 
 Each phase builds on the previous one, starting from a working Jellyfin install.

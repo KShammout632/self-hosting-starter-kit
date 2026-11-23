@@ -123,6 +123,15 @@ function ServiceCard({ service }: { service: ServiceSummary }) {
         </p>
       ) : null}
       {!busy && service.message ? <p className="text-sm">{service.message}</p> : null}
+      {!busy && service.notice ? <p className="text-sm">{service.notice}</p> : null}
+      {!busy && service.update?.available ? (
+        <p className="text-sm text-warning">
+          An update is available.{' '}
+          <Link to={`/services/${service.name}`} className="underline">
+            See details
+          </Link>
+        </p>
+      ) : null}
       {service.errorCount > 0 ? (
         <p className="text-sm text-warning">
           {service.errorCount === 1

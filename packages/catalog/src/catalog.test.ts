@@ -4,6 +4,7 @@ import { LIBRARY_FOLDER_PATHS } from '@selfhost/shared';
 import {
   catalog,
   getManifest,
+  imageRef,
   imageVars,
   loadComposeTemplate,
   renderCompose,
@@ -30,6 +31,24 @@ describe('catalog', () => {
     for (const manifest of catalog) expect(serviceManifest.safeParse(manifest).success).toBe(true);
   });
 
+  it('pins every image by digest, and shows an owner-friendly version', () => {
+    for (const manifest of catalog) {
+      expect(manifest.version.length).toBeGreaterThan(0);
+      for (const image of manifest.images) expect(image.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    }
+  });
+
+  it('uses the digest-less GPU tag only for the image that has a GPU build', () => {
+    const immich = getManifest('immich')!;
+    const learning = immich.images.find((image) => image.container === 'immich-machine-learning')!;
+    expect(imageRef(immich, learning, false)).toMatch(/:v3\.4\.2@sha256:/);
+    expect(imageRef(immich, learning, true)).toBe(
+      'ghcr.io/immich-app/immich-machine-learning:v3.4.2-openvino',
+    );
+    const server = immich.images.find((image) => image.container === 'immich-server')!;
+    expect(imageRef(immich, server, true)).toBe(imageRef(immich, server, false));
+  });
+
   it('rejects floating image tags', () => {
     const jellyfin = getManifest('jellyfin')!;
     const floating = { ...jellyfin, images: [{ ...jellyfin.images[0]!, tag: 'latest' }] };
@@ -45,7 +64,7 @@ describe('jellyfin template', () => {
   it('renders valid compose YAML from the manifest pin', () => {
     const compose = parse(renderTemplate(template, { ...vars, GPU: false }));
     const service = compose.services.jellyfin;
-    expect(service.image).toBe('jellyfin/jellyfin:12.4');
+    expect(service.image).toMatch(/^jellyfin\/jellyfin:12\.4@sha256:[a-f0-9]{64}$/);
     expect(service.user).toBe('1001:1001');
     expect(service.ports).toEqual(['8096:8096']);
     expect(service.devices).toBeUndefined();

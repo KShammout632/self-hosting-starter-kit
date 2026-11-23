@@ -13,6 +13,7 @@ import {
 export interface Paths {
   servicesDir: string;
   configDir: string;
+  backupsDir: string;
   renderDevice: string;
   unitDir: string;
   mountRoot: string;
@@ -21,6 +22,7 @@ export interface Paths {
 export const DEFAULT_PATHS: Paths = {
   servicesDir: '/opt/selfhost/services',
   configDir: '/opt/selfhost/config',
+  backupsDir: '/opt/selfhost/backups',
   renderDevice: '/dev/dri/renderD128',
   unitDir: '/etc/systemd/system',
   mountRoot: '/mnt',

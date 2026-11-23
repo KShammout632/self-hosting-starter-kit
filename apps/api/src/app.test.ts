@@ -308,6 +308,43 @@ describe('services', () => {
     expect(t.audit.recent(5)[0]).toMatchObject({ outcome: 'failed' });
   });
 
+  it('reports an available update and keeps the service online while it updates', async () => {
+    const t = await make();
+    const login = await setupAndLogin(t);
+    t.agent.serviceState = 'running';
+    t.agent.updateAvailable = true;
+    await t.monitor.refresh();
+    expect(t.monitor.snapshot().services[0]).toMatchObject({
+      status: 'online',
+      update: { available: true, installedVersion: '12.3', newVersion: '12.4' },
+    });
+
+    t.agent.updateAvailable = false;
+    await post(t, '/api/services/jellyfin/update', {}, login.headers);
+    await vi.waitFor(() => expect(t.monitor.snapshot().services[0]?.busy).toBeNull());
+    expect(t.monitor.snapshot().services[0]?.update?.available).toBe(false);
+    expect(t.audit.recent(5)[0]).toMatchObject({ event: 'service.update', outcome: 'ok' });
+  });
+
+  it('explains a rolled back update without calling the service broken', async () => {
+    const t = await make();
+    const login = await setupAndLogin(t);
+    t.agent.serviceState = 'running';
+    t.agent.failNext = new AgentRequestError('rolled_back', 'put back');
+    await post(t, '/api/services/jellyfin/update', {}, login.headers);
+    await vi.waitFor(() => expect(t.monitor.snapshot().services[0]?.busy).toBeNull());
+    expect(t.monitor.snapshot().services[0]).toMatchObject({
+      status: 'online',
+      message: null,
+      notice: expect.stringContaining('put back the way it was'),
+    });
+    expect(t.audit.recent(5)[0]).toMatchObject({ outcome: 'failed', detail: 'rolled_back' });
+
+    await post(t, '/api/services/jellyfin/restart', {}, login.headers);
+    await vi.waitFor(() => expect(t.monitor.snapshot().services[0]?.busy).toBeNull());
+    expect(t.monitor.snapshot().services[0]?.notice).toBeNull();
+  });
+
   it('stops and starts a service', async () => {
     const t = await make();
     const login = await setupAndLogin(t);

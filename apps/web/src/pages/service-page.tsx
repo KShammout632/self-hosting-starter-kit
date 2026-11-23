@@ -130,6 +130,11 @@ export function ServicePage() {
           </p>
         ) : null}
         {!busy && service.message ? <p className="text-sm">{service.message}</p> : null}
+        {!busy && service.notice ? (
+          <p className="text-sm" role="status">
+            {service.notice}
+          </p>
+        ) : null}
         {actions.error ? (
           <p role="alert" className="text-sm text-destructive">
             {actions.error}
@@ -174,13 +179,6 @@ export function ServicePage() {
               >
                 Restart
               </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => actions.run(service.name, 'update')}
-              >
-                Update
-              </Button>
               <Button variant="ghost" disabled={busy} onClick={() => setRemoving(true)}>
                 Remove
               </Button>
@@ -192,6 +190,29 @@ export function ServicePage() {
           )}
         </div>
       </Card>
+
+      {installed && service.update?.available ? (
+        <Card className="space-y-3" aria-label="Update available">
+          <h2 className="font-semibold">An update is available</h2>
+          <p className="text-sm">
+            {service.update.installedVersion
+              ? `You have version ${service.update.installedVersion}. Version ${service.update.newVersion} is ready.`
+              : `Version ${service.update.newVersion} is ready.`}{' '}
+            Your settings and data are saved first. If the new version does not start properly,
+            everything is put back the way it was.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={busy} onClick={() => actions.run(service.name, 'update')}>
+              Update now
+            </Button>
+            <Button variant="ghost" asChild>
+              <a href={service.update.releaseNotesUrl} target="_blank" rel="noreferrer">
+                What is new
+              </a>
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {service.hints.length > 0 ? (
         <Card className="space-y-2" aria-label="Suggestions">

@@ -9,6 +9,7 @@ import type { HostFs, Paths } from './host';
 const paths: Paths = {
   servicesDir: '/opt/selfhost/services',
   configDir: '/opt/selfhost/config',
+  backupsDir: '/opt/selfhost/backups',
   renderDevice: '/dev/dri/renderD128',
   unitDir: '/etc/systemd/system',
   mountRoot: '/mnt',

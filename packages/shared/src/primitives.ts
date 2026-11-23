@@ -54,7 +54,7 @@ export const folderSubpath = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}(\/[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}){0,3}$/);
 
-export const CONFIRM_KINDS = ['service.uninstall', 'disk.format'] as const;
+export const CONFIRM_KINDS = ['service.uninstall', 'disk.format', 'snapshot.restore'] as const;
 export const confirmKind = z.enum(CONFIRM_KINDS);
 export type ConfirmKind = z.infer<typeof confirmKind>;
 // A service name or a device name, checked against the kind by the agent.

@@ -4,12 +4,16 @@ import { libraryFolder, serviceName } from '@selfhost/shared';
 const port = z.number().int().min(1024).max(65535);
 const containerName = z.string().regex(/^[a-z][a-z0-9-]*$/);
 const envName = z.string().regex(/^[A-Z][A-Z0-9_]*$/);
+const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 
 export const serviceManifest = z
   .object({
     name: serviceName,
     displayName: z.string().min(1),
     description: z.string().min(1),
+    // What the owner sees in "Update available". Bump it together with the image pins.
+    version: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/),
+    releaseNotesUrl: z.string().regex(/^https:\/\/[A-Za-z0-9./_-]+$/),
     ports: z.object({ lan: port, remote: port }).strict(),
     images: z
       .array(
@@ -22,6 +26,12 @@ export const serviceManifest = z
               .string()
               .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
               .refine((tag) => tag !== 'latest', 'Image tags must be pinned'),
+            // Pins the exact image, so a re-tagged or tampered tag is never pulled.
+            digest: digest.optional(),
+            // For the one image that has a different build with the Intel GPU on. It takes the
+            // GPU suffix, and its own digest when one is known.
+            gpuVariant: z.boolean().default(false),
+            gpuDigest: digest.optional(),
           })
           .strict(),
       )
@@ -32,6 +42,24 @@ export const serviceManifest = z
     // Folders under /opt/selfhost/config/<name> that containers write to. The agent creates them
     // owned by the selfhost user, otherwise Docker creates them as root and the container cannot write.
     configDirs: z.array(z.string().regex(/^[a-z][a-z0-9-]*$/)).default([]),
+    // How the pre-update snapshot treats this service. Folders listed in skipDirs are left out of the
+    // copy (databases are saved with pg_dump instead, caches are rebuilt on demand).
+    snapshot: z
+      .object({
+        skipDirs: z.array(z.string().regex(/^[a-z][a-z0-9-]*$/)).default([]),
+        database: z
+          .object({
+            container: containerName,
+            user: z.string().regex(/^[a-z][a-z0-9_]*$/),
+            name: z.string().regex(/^[a-z][a-z0-9_]*$/),
+            // Folder under the config folder that holds the Postgres files.
+            dataDir: z.string().regex(/^[a-z][a-z0-9-]*$/),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .default({ skipDirs: [] }),
     // Random values the agent generates once and keeps in <config>/.env (mode 0600). Each alias
     // gets the same value, for containers that expect the password under a different name.
     secrets: z

@@ -18,14 +18,13 @@ export interface ComposeContext {
 export function renderCompose(manifest: ServiceManifest, context: ComposeContext): string {
   const gpu = manifest.gpu.intel && context.renderGid !== null;
   const vars: TemplateVars = {
-    ...imageVars(manifest),
+    ...imageVars(manifest, gpu),
     PUID: context.puid,
     PGID: context.pgid,
     TZ: context.tz,
     LAN_PORT: manifest.ports.lan,
     CONFIG_DIR: context.configDir,
     GPU: gpu,
-    GPU_IMAGE_SUFFIX: gpu ? (manifest.gpu.imageSuffix ?? '') : '',
     TRUSTED_DOMAINS: context.trustedDomains.join(' '),
   };
   if (gpu) vars.RENDER_GID = context.renderGid!;

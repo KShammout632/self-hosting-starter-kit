@@ -17,6 +17,15 @@ export type ContainerSummary = z.infer<typeof containerSummary>;
 
 export const SERVICE_STATES = ['not_found', 'running', 'stopped', 'partial', 'restarting'] as const;
 
+export const serviceUpdateInfo = z.object({
+  available: z.boolean(),
+  // Null for a server installed before versions were recorded.
+  installedVersion: z.string().nullable(),
+  newVersion: z.string(),
+  releaseNotesUrl: z.string(),
+});
+export type ServiceUpdateInfo = z.infer<typeof serviceUpdateInfo>;
+
 export const serviceStatusResult = z.object({
   service: serviceName,
   state: z.enum(SERVICE_STATES),
@@ -27,8 +36,13 @@ export const serviceStatusResult = z.object({
   missingFolders: z.array(libraryFolder),
   // True while the owner has not yet been shown this service's one-time login details.
   credentialsPending: z.boolean(),
+  // Null while the service is not installed.
+  update: serviceUpdateInfo.nullable(),
 });
 export type ServiceStatusResult = z.infer<typeof serviceStatusResult>;
+
+export const snapshotCreateResult = z.object({ snapshot: z.string() });
+export type SnapshotCreateResult = z.infer<typeof snapshotCreateResult>;
 
 export const serviceCredentialsResult = z.object({
   credentials: z.array(z.object({ label: z.string(), value: z.string() })),

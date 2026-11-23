@@ -22,7 +22,7 @@ services:
       - database
 
   immich-machine-learning:
-    image: {{IMAGE_IMMICH_MACHINE_LEARNING}}{{GPU_IMAGE_SUFFIX}}
+    image: {{IMAGE_IMMICH_MACHINE_LEARNING}}
     container_name: selfhost-immich-machine-learning
     restart: unless-stopped
     user: "{{PUID}}:{{PGID}}"

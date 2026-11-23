@@ -19,6 +19,7 @@ import { AgentError } from './errors';
 import type { HttpChecker, LineStreamer, Runner } from './exec';
 import type { HostFs, Paths } from './host';
 import { credentialsPending, serviceHandlers } from './service-handlers';
+import { updateHandlers, updateInfo } from './update-handlers';
 import { missingFolders } from './storage';
 import { storageHandlers } from './storage-handlers';
 import { tailscaleHandlers } from './tailscale';
@@ -32,6 +33,8 @@ export interface Deps {
   stream: LineStreamer;
   httpCheck: HttpChecker;
   confirmTokens: ConfirmTokens;
+  // Only tests set this, to make the update health wait short.
+  timing?: { pollMs: number; healthTimeoutMs: number };
 }
 
 export interface HandlerContext {
@@ -59,6 +62,7 @@ export function deriveServiceState(containers: ContainerSummary[]): ServiceStatu
 
 export const handlers: Handlers = {
   ...serviceHandlers,
+  ...updateHandlers,
   ...storageHandlers,
   ...tailscaleHandlers,
 
@@ -94,7 +98,7 @@ export const handlers: Handlers = {
 
   async 'confirm.issue'(request, deps) {
     const validTarget =
-      request.kind === 'service.uninstall'
+      request.kind !== 'disk.format'
         ? serviceName.safeParse(request.target).success
         : deviceName.safeParse(request.target).success;
     if (!validTarget) throw new AgentError('invalid_request', 'Request arguments are not valid.');
@@ -127,6 +131,7 @@ export const handlers: Handlers = {
       missingFolders: await missingFolders(deps, folders).catch(() => []),
       credentialsPending:
         state !== 'not_found' && manifest ? await credentialsPending(deps, manifest) : false,
+      update: manifest ? await updateInfo(deps, manifest) : null,
     };
     return { data };
   },

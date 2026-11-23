@@ -22,6 +22,7 @@ export interface FakeAgent extends AgentClient {
   httpOk: boolean;
   missingFolders: string[];
   credentialsPending: boolean;
+  updateAvailable: boolean;
   disks: unknown[];
   mappedFolders: Record<string, { mountLabel: string; subpath: string }>;
   tailscale: TailscaleStatusResult;
@@ -59,6 +60,7 @@ export function createFakeAgent(): FakeAgent {
     httpOk: true,
     missingFolders: [],
     credentialsPending: false,
+    updateAvailable: false,
     disks: [],
     mappedFolders: {},
     tailscale: SIGNED_OUT,
@@ -75,6 +77,15 @@ export function createFakeAgent(): FakeAgent {
           http: state === 'running' ? { ok: agent.httpOk } : null,
           missingFolders: agent.missingFolders,
           credentialsPending: agent.credentialsPending,
+          update:
+            state === 'not_found'
+              ? null
+              : {
+                  available: agent.updateAvailable,
+                  installedVersion: '12.3',
+                  newVersion: '12.4',
+                  releaseNotesUrl: 'https://github.com/jellyfin/jellyfin/releases',
+                },
           containers:
             state === 'not_found'
               ? []
