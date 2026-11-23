@@ -111,8 +111,15 @@ const STORAGE_LOCKED_ACTIONS: ReadonlySet<AgentAction> = new Set([
   'folder.assign',
 ]);
 
+const TAILSCALE_LOCKED_ACTIONS: ReadonlySet<AgentAction> = new Set([
+  'tailscale.login',
+  'tailscale.logout',
+  'tailscale.serve.apply',
+]);
+
 export function lockKey(request: AgentRequest): string | null {
   if (STORAGE_LOCKED_ACTIONS.has(request.action)) return 'storage';
+  if (TAILSCALE_LOCKED_ACTIONS.has(request.action)) return 'tailscale';
   return serviceLockKey(request);
 }
 

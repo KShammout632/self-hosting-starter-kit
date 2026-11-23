@@ -29,6 +29,8 @@ const DRY_RUN_FIXTURES: Record<string, string> = {
   tailscale: JSON.stringify({
     BackendState: 'Running',
     Self: { HostName: 'selfhost-dev', DNSName: 'selfhost-dev.example.ts.net.' },
+    CurrentTailnet: { MagicDNSEnabled: true },
+    CertDomains: ['selfhost-dev.example.ts.net'],
   }),
   docker: 'selfhost-jellyfin-1  | 2026-11-22T09:30:00.000000000Z dry-run log line\n',
   id: '1001\n',

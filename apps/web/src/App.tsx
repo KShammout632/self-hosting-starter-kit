@@ -7,6 +7,7 @@ import { SESSION_KEY, useSession } from '@/lib/session';
 import { useStatus, useStatusStream } from '@/lib/status';
 import { LoginPage, SetupPage } from '@/pages/auth-pages';
 import { HomePage } from '@/pages/home-page';
+import { RemotePage } from '@/pages/remote-page';
 import { ServicePage } from '@/pages/service-page';
 import { StoragePage } from '@/pages/storage-page';
 
@@ -58,6 +59,7 @@ function Layout() {
             {[
               { to: '/', label: 'Home', end: true },
               { to: '/storage', label: 'Storage', end: false },
+              { to: '/remote', label: 'Remote access', end: false },
             ].map((link) => (
               <NavLink
                 key={link.to}
@@ -109,6 +111,7 @@ export function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/services/:name" element={<ServicePage />} />
           <Route path="/storage" element={<StoragePage />} />
+          <Route path="/remote" element={<RemotePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

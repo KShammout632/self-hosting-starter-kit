@@ -2,6 +2,7 @@ import type {
   DiskInfo,
   FolderUsageResult,
   MissingDrive,
+  RemoteTarget,
   ServiceName,
   SystemInfoResult,
 } from './index';
@@ -86,4 +87,32 @@ export interface StorageSnapshot {
   missing: MissingDrive[];
   folders: FolderUsageResult[];
   job: StorageJob | null;
+}
+
+export const REMOTE_STATES = [
+  'not_installed',
+  'signed_out',
+  'waiting_for_sign_in',
+  'needs_settings',
+  'ready',
+] as const;
+export type RemoteState = (typeof REMOTE_STATES)[number];
+
+export interface RemoteLink {
+  target: RemoteTarget;
+  label: string;
+  url: string;
+}
+
+export interface RemoteSnapshot {
+  state: RemoteState;
+  // The name this server has on the tailnet, or the one the page proposes before connecting.
+  name: string;
+  signInUrl: string | null;
+  magicDnsEnabled: boolean;
+  httpsEnabled: boolean;
+  // Where the owner switches MagicDNS and HTTPS certificates on.
+  settingsUrl: string;
+  links: RemoteLink[];
+  message: string | null;
 }
