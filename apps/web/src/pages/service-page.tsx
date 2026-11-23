@@ -1,6 +1,8 @@
 import { Loader2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
+import type { ServiceCredentialsResult } from '@selfhost/shared';
+import { CredentialsCard } from '@/components/credentials-card';
 import { LogViewer } from '@/components/log-viewer';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -85,6 +87,7 @@ export function ServicePage() {
   const status = useStatus();
   const actions = useServiceAction();
   const [removing, setRemoving] = useState(false);
+  const [revealed, setRevealed] = useState<ServiceCredentialsResult['credentials'] | null>(null);
 
   if (status.isPending) return <p className="text-muted-foreground">Loading...</p>;
   const service = status.data?.services.find((candidate) => candidate.name === name);
@@ -194,6 +197,15 @@ export function ServicePage() {
             ))}
           </ul>
         </Card>
+      ) : null}
+
+      {installed && (service.credentialsPending || revealed) ? (
+        <CredentialsCard
+          service={service.name}
+          displayName={service.displayName}
+          revealed={revealed}
+          onReveal={setRevealed}
+        />
       ) : null}
 
       <Card className="space-y-2" aria-label="Getting started">

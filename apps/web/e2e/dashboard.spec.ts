@@ -246,4 +246,37 @@ test.describe('service page', () => {
       'Something else is already happening with this service.',
     );
   });
+
+  test('shows the admin login once and keeps it on screen until you leave', async ({ page }) => {
+    const state = newState({
+      service: jellyfin({
+        name: 'nextcloud',
+        displayName: 'Nextcloud',
+        credentialsPending: true,
+      }),
+    });
+    await mockApi(page, state);
+    await page.goto('/services/nextcloud');
+
+    const card = page.getByLabel('Your login details');
+    await expect(card).toContainText('shown only once');
+    await expect(page.getByText('correct-horse-battery')).toBeHidden();
+
+    await card.getByRole('button', { name: 'Show my login' }).click();
+    await expect(card.getByText('correct-horse-battery')).toBeVisible();
+    await expect(card.getByText('admin', { exact: true })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Copy admin password' })).toBeVisible();
+    await expect(card).toContainText('cannot be shown again after you leave this page');
+
+    await page.reload();
+    await expect(page.getByLabel('Your login details')).toBeHidden();
+    await expect(page.getByText('correct-horse-battery')).toBeHidden();
+  });
+
+  test('does not offer login details for services that have none', async ({ page }) => {
+    await mockApi(page, newState());
+    await page.goto('/services/jellyfin');
+    await expect(page.getByRole('heading', { name: 'Jellyfin' })).toBeVisible();
+    await expect(page.getByLabel('Your login details')).toBeHidden();
+  });
 });

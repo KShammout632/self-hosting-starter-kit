@@ -32,6 +32,8 @@ export interface ServiceSummary {
   description: string;
   lanPort: number;
   firstLoginTips: string[];
+  // True until the owner has been shown the one-time login details (Nextcloud's admin password).
+  credentialsPending: boolean;
   status: ServiceStatus;
   // A plain-English reason shown when the status needs explaining.
   message: string | null;

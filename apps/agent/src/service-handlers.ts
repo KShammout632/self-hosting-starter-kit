@@ -1,5 +1,11 @@
+import { randomBytes } from 'node:crypto';
+import os from 'node:os';
 import { getManifest, renderCompose, type ServiceManifest } from '@selfhost/catalog';
-import type { ServiceName } from '@selfhost/shared';
+import {
+  LIBRARY_FOLDER_PATHS,
+  type ServiceCredentialsResult,
+  type ServiceName,
+} from '@selfhost/shared';
 import { projectName } from './docker';
 import { AgentError } from './errors';
 import type { Deps, Handlers } from './handlers';
@@ -51,6 +57,54 @@ const composeFile = (deps: Deps, service: ServiceName) =>
 function timezone(): string {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return SAFE_TIMEZONE.test(zone) ? zone : 'UTC';
+}
+
+const ENV_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
+const SAFE_HOST = /^[A-Za-z0-9.-]{1,253}$/;
+const VIRTUAL_INTERFACE = /^(docker|br-|veth|virbr|tailscale)/;
+
+// Names this machine answers to, for services that reject requests addressed to an unknown host.
+function trustedDomains(): string[] {
+  const addresses = Object.entries(os.networkInterfaces())
+    .filter(([name]) => !VIRTUAL_INTERFACE.test(name))
+    .flatMap(([, entries]) => entries ?? [])
+    .filter((entry) => entry.family === 'IPv4' && !entry.internal)
+    .map((entry) => entry.address);
+  const names = ['localhost', '127.0.0.1', os.hostname(), ...addresses];
+  return [...new Set(names)].filter((name) => SAFE_HOST.test(name));
+}
+
+function parseEnv(text: string | null): Map<string, string> {
+  const values = new Map<string, string>();
+  for (const line of (text ?? '').split(/\r?\n/)) {
+    const match = ENV_LINE.exec(line.trim());
+    if (match) values.set(match[1]!, match[2]!);
+  }
+  return values;
+}
+
+const envFile = (deps: Deps, service: ServiceName) => `${deps.paths.configDir}/${service}/.env`;
+const credentialsMarker = (deps: Deps, service: ServiceName) =>
+  `${deps.paths.configDir}/${service}/.credentials-shown`;
+
+// Generates each secret once and keeps it across updates, so a reinstall never changes a database
+// password the data folder was already created with. Root-owned and 0600: only compose reads it.
+async function writeSecrets(deps: Deps, manifest: ServiceManifest): Promise<void> {
+  if (manifest.secrets.length === 0) return;
+  const path = envFile(deps, manifest.name);
+  const existing = parseEnv(await deps.fs.readFile(path));
+  const lines = manifest.secrets.flatMap(({ name, aliases }) => {
+    const value = existing.get(name) ?? randomBytes(32).toString('hex');
+    return [name, ...aliases].map((key) => `${key}=${value}`);
+  });
+  await deps.fs.writeFile(path, `${lines.join('\n')}\n`, 0o600);
+}
+
+export async function credentialsPending(deps: Deps, manifest: ServiceManifest): Promise<boolean> {
+  return (
+    manifest.credentials.length > 0 &&
+    !(await deps.fs.exists(credentialsMarker(deps, manifest.name)))
+  );
 }
 
 async function serviceUserId(deps: Deps, flag: '-u' | '-g'): Promise<number> {
@@ -114,11 +168,22 @@ async function writeService(deps: Deps, manifest: ServiceManifest): Promise<void
     tz: timezone(),
     configDir,
     renderGid,
+    trustedDomains: trustedDomains(),
   });
 
   const owner = { uid, gid };
   await deps.fs.ensureDir(configDir, owner);
   for (const dir of manifest.configDirs) await deps.fs.ensureDir(`${configDir}/${dir}`, owner);
+  await writeSecrets(deps, manifest);
+  if (manifest.libraryOwnerUid !== undefined) {
+    const libraryOwner = { uid: manifest.libraryOwnerUid, gid };
+    for (const { folder, access } of manifest.libraryFolders) {
+      const path = LIBRARY_FOLDER_PATHS[folder];
+      if (access === 'rw' && (await deps.fs.exists(path))) {
+        await deps.fs.setOwner(path, libraryOwner, 0o2775);
+      }
+    }
+  }
   await deps.fs.ensureDir(`${deps.paths.servicesDir}/${manifest.name}`);
   await deps.fs.writeFile(composeFile(deps, manifest.name), rendered, 0o644);
 }
@@ -129,6 +194,33 @@ export const serviceHandlers: Handlers = {
     await writeService(deps, manifest);
     await compose(deps, request.service, ['up', '--detach'], { timeoutMs: 20 * MINUTES });
     return { data: {} };
+  },
+
+  // Returns the one-time login details once, then refuses. The marker is written before the reply
+  // so a crash can never show the same password twice.
+  async 'service.credentials'(request, deps) {
+    const manifest = requireManifest(request.service);
+    await requireInstalled(deps, request.service);
+    if (manifest.credentials.length === 0) {
+      throw new AgentError('not_found', 'This service has no login details to show.');
+    }
+    if (!(await credentialsPending(deps, manifest))) {
+      throw new AgentError('refused', 'The login details were already shown.');
+    }
+    const secrets = parseEnv(await deps.fs.readFile(envFile(deps, request.service)));
+    const credentials = manifest.credentials.map((entry) => {
+      const value = entry.value ?? secrets.get(entry.secret!);
+      if (value === undefined) {
+        throw new AgentError(
+          'failed',
+          'The saved login details are missing. Reinstall the service.',
+        );
+      }
+      return { label: entry.label, value };
+    });
+    await deps.fs.writeFile(credentialsMarker(deps, request.service), 'shown', 0o600);
+    const data: ServiceCredentialsResult = { credentials };
+    return { data };
   },
 
   async 'service.start'(request, deps) {

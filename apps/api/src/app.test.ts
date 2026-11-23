@@ -175,7 +175,12 @@ describe('services', () => {
     await t.monitor.refresh();
     const body = (await t.app.inject({ url: '/api/services', headers: login.headers })).json();
     expect(body.agentReachable).toBe(true);
-    expect(body.services).toHaveLength(1);
+    expect(body.services.map((service: { name: string }) => service.name)).toEqual([
+      'jellyfin',
+      'navidrome',
+      'immich',
+      'nextcloud',
+    ]);
     expect(body.services[0]).toMatchObject({
       name: 'jellyfin',
       displayName: 'Jellyfin',
@@ -196,11 +201,31 @@ describe('services', () => {
     expect(body.services[0].status).toBe('error');
   });
 
-  it('returns 404 for services that are not in the catalog yet', async () => {
+  it('returns 404 for services that are not in the catalog', async () => {
     const t = await make();
     const login = await setupAndLogin(t);
-    expect((await post(t, '/api/services/immich/start', {}, login.headers)).statusCode).toBe(404);
     expect((await post(t, '/api/services/rm-rf/start', {}, login.headers)).statusCode).toBe(404);
+  });
+
+  it('shows one-time login details once, then refuses', async () => {
+    const t = await make();
+    const login = await setupAndLogin(t);
+    t.agent.serviceState = 'running';
+    t.agent.credentialsPending = true;
+    await t.monitor.refresh();
+    const listed = (await t.app.inject({ url: '/api/services', headers: login.headers })).json();
+    expect(listed.services[3]).toMatchObject({ name: 'nextcloud', credentialsPending: true });
+
+    const first = await post(t, '/api/services/nextcloud/credentials', {}, login.headers);
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({
+      credentials: [{ label: 'Admin password', value: 'secret-value' }],
+    });
+
+    const again = await post(t, '/api/services/nextcloud/credentials', {}, login.headers);
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toMatchObject({ error: 'already_shown' });
+    expect(JSON.stringify(t.audit.recent?.(20) ?? [])).not.toContain('secret-value');
   });
 
   it('runs an install in the background and shows it as busy until it finishes', async () => {

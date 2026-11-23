@@ -23,14 +23,17 @@ function makeHost(
   const files = new Map<string, string>();
   const dirs: { path: string; owner?: { uid: number; gid: number } }[] = [];
   const removed: string[] = [];
+  const modes = new Map<string, number>();
+  const owned: { path: string; owner: { uid: number; gid: number }; mode: number }[] = [];
   const commands: (readonly string[])[] = [];
 
   const fs: HostFs = {
     async ensureDir(path, owner) {
       dirs.push({ path, owner });
     },
-    async writeFile(path, content) {
+    async writeFile(path, content, mode) {
       files.set(path, content);
+      modes.set(path, mode);
     },
     async removeDir(path) {
       removed.push(path);
@@ -53,7 +56,9 @@ function makeHost(
         .filter((key) => key.startsWith(path + '/'))
         .map((key) => key.slice(path.length + 1).split('/')[0]!);
     },
-    async setOwner() {},
+    async setOwner(path, owner, mode) {
+      owned.push({ path, owner, mode });
+    },
   };
 
   const run: Deps['run'] = async (file, args) => {
@@ -73,7 +78,7 @@ function makeHost(
     httpCheck: async () => true,
     confirmTokens: createConfirmTokens(),
   };
-  return { deps, files, dirs, removed, commands };
+  return { deps, files, dirs, removed, commands, modes, owned };
 }
 
 async function ask(deps: Deps, request: Record<string, unknown>): Promise<AgentResponse[]> {
@@ -86,6 +91,141 @@ async function ask(deps: Deps, request: Record<string, unknown>): Promise<AgentR
 const install = (deps: Deps) => ask(deps, { action: 'service.install', service: 'jellyfin' });
 const dockerCommands = (commands: (readonly string[])[]) =>
   commands.filter((c) => c[0] === 'docker').map((c) => c.slice(6).join(' '));
+
+const installService = (deps: Deps, service: string) =>
+  ask(deps, { action: 'service.install', service });
+const composeOf = (host: ReturnType<typeof makeHost>, service: string) =>
+  parse(host.files.get(`/opt/selfhost/services/${service}/compose.yml`)!, { merge: true });
+
+describe('Navidrome, Immich and Nextcloud', () => {
+  it('installs Navidrome with music mounted read-only', async () => {
+    const host = makeHost();
+    expect(await installService(host.deps, 'navidrome')).toMatchObject([{ ok: true }]);
+    const service = composeOf(host, 'navidrome').services.navidrome;
+    expect(service.image).toBe('deluan/navidrome:0.64.2');
+    expect(service.ports).toEqual(['4533:4533']);
+    expect(service.volumes).toContain('/srv/media/music:/music:ro');
+  });
+
+  it('installs Immich with a generated database password kept private', async () => {
+    const host = makeHost();
+    expect(await installService(host.deps, 'immich')).toMatchObject([{ ok: true }]);
+    const env = host.files.get('/opt/selfhost/config/immich/.env')!;
+    const password = /^DB_PASSWORD=([0-9a-f]{64})$/m.exec(env)?.[1];
+    expect(password).toBeDefined();
+    expect(env).toContain(`POSTGRES_PASSWORD=${password}`);
+    expect(host.modes.get('/opt/selfhost/config/immich/.env')).toBe(0o600);
+    expect(host.files.get('/opt/selfhost/services/immich/compose.yml')).not.toContain(password!);
+
+    const { services } = composeOf(host, 'immich');
+    expect(Object.keys(services)).toEqual([
+      'immich-server',
+      'immich-machine-learning',
+      'redis',
+      'database',
+    ]);
+    expect(services['immich-server'].volumes).toEqual(['/srv/photos:/data']);
+    expect(services.database.volumes).toEqual([
+      '/opt/selfhost/config/immich/db:/var/lib/postgresql/data',
+    ]);
+    expect(services['immich-machine-learning'].image).toBe(
+      'ghcr.io/immich-app/immich-machine-learning:v3.4.2',
+    );
+  });
+
+  it('uses the OpenVINO build of machine learning only with an Intel GPU', async () => {
+    const host = makeHost({ renderGid: 105 });
+    await installService(host.deps, 'immich');
+    const ml = composeOf(host, 'immich').services['immich-machine-learning'];
+    expect(ml.image).toBe('ghcr.io/immich-app/immich-machine-learning:v3.4.2-openvino');
+    expect(ml.devices).toEqual(['/dev/dri:/dev/dri']);
+    expect(ml.mem_limit).toBe('3g');
+  });
+
+  it('keeps the same secrets when a service is updated or installed again', async () => {
+    const host = makeHost();
+    await installService(host.deps, 'immich');
+    const first = host.files.get('/opt/selfhost/config/immich/.env');
+    await ask(host.deps, { action: 'service.update', service: 'immich' });
+    await installService(host.deps, 'immich');
+    expect(host.files.get('/opt/selfhost/config/immich/.env')).toBe(first);
+  });
+
+  it('installs Nextcloud with Postgres, Redis and a cron container', async () => {
+    const host = makeHost();
+    expect(await installService(host.deps, 'nextcloud')).toMatchObject([{ ok: true }]);
+    const { services } = composeOf(host, 'nextcloud');
+    expect(Object.keys(services).sort()).toEqual(['app', 'cron', 'database', 'redis']);
+    expect(services.app.ports).toEqual(['8081:80']);
+    expect(services.app.image).toBe('nextcloud:35.0.3-apache');
+    expect(services.cron.entrypoint).toBe('/cron.sh');
+    expect(services.app.environment.NEXTCLOUD_TRUSTED_DOMAINS).toContain('localhost');
+    expect(services.app.volumes).toContain('/srv/nextcloud:/var/www/html/data');
+
+    const env = host.files.get('/opt/selfhost/config/nextcloud/.env')!;
+    expect(env).toMatch(/^POSTGRES_PASSWORD=[0-9a-f]{64}$/m);
+    expect(env).toMatch(/^NEXTCLOUD_ADMIN_PASSWORD=[0-9a-f]{64}$/m);
+  });
+
+  it('gives the Nextcloud web user the data folder when it exists', async () => {
+    const host = makeHost();
+    host.files.set('/srv/nextcloud', '');
+    await installService(host.deps, 'nextcloud');
+    expect(host.owned).toContainEqual({
+      path: '/srv/nextcloud',
+      owner: { uid: 33, gid: 1002 },
+      mode: 0o2775,
+    });
+  });
+
+  it('shows the Nextcloud admin login once, then refuses', async () => {
+    const host = makeHost();
+    await installService(host.deps, 'nextcloud');
+    const password = /^NEXTCLOUD_ADMIN_PASSWORD=(.+)$/m.exec(
+      host.files.get('/opt/selfhost/config/nextcloud/.env')!,
+    )![1];
+
+    host.deps.docker.listServiceContainers = async () => [
+      { name: 'selfhost-nextcloud', state: 'running', health: null, startedAt: null },
+    ];
+    const pending = async () => {
+      const [reply] = await ask(host.deps, { action: 'service.status', service: 'nextcloud' });
+      return (reply as unknown as { data: { credentialsPending: boolean } }).data
+        .credentialsPending;
+    };
+    expect(await pending()).toBe(true);
+
+    const [first] = await ask(host.deps, { action: 'service.credentials', service: 'nextcloud' });
+    expect(first).toMatchObject({
+      ok: true,
+      data: {
+        credentials: [
+          { label: 'Admin user name', value: 'admin' },
+          { label: 'Admin password', value: password },
+        ],
+      },
+    });
+    expect(await pending()).toBe(false);
+
+    const [second] = await ask(host.deps, { action: 'service.credentials', service: 'nextcloud' });
+    expect(second).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(JSON.stringify(second)).not.toContain(password!);
+  });
+
+  it('has no login details to show for services without any', async () => {
+    const host = makeHost();
+    await install(host.deps);
+    const [reply] = await ask(host.deps, { action: 'service.credentials', service: 'jellyfin' });
+    expect(reply).toMatchObject({ ok: false, error: { code: 'not_found' } });
+  });
+
+  it('keeps the saved secrets when the owner removes a service but keeps its data', async () => {
+    const host = makeHost();
+    await installService(host.deps, 'immich');
+    await ask(host.deps, { action: 'service.uninstall', service: 'immich', deleteData: false });
+    expect(host.files.has('/opt/selfhost/config/immich/.env')).toBe(true);
+  });
+});
 
 describe('service.install', () => {
   it('writes the compose file, creates config folders for the selfhost user, and starts it', async () => {
@@ -125,13 +265,6 @@ describe('service.install', () => {
     const host = makeHost();
     await install(host.deps);
     expect(await install(host.deps)).toMatchObject([{ ok: true }]);
-  });
-
-  it('says plainly that services outside the catalog are not available', async () => {
-    const host = makeHost();
-    const [reply] = await ask(host.deps, { action: 'service.install', service: 'immich' });
-    expect(reply).toMatchObject({ ok: false, error: { code: 'not_implemented' } });
-    expect(host.commands).toEqual([]);
   });
 
   it('reports a missing selfhost user instead of installing as root', async () => {

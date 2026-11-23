@@ -1,0 +1,16 @@
+name: selfhost-navidrome
+services:
+  navidrome:
+    image: {{IMAGE_NAVIDROME}}
+    container_name: selfhost-navidrome
+    restart: unless-stopped
+    user: "{{PUID}}:{{PGID}}"
+    ports:
+      - "{{LAN_PORT}}:4533"
+    environment:
+      TZ: "{{TZ}}"
+      ND_SCANSCHEDULE: "@every 1h"
+      ND_LOGLEVEL: "info"
+    volumes:
+      - {{CONFIG_DIR}}/data:/data
+      - {{MUSIC_DIR}}:/music:ro

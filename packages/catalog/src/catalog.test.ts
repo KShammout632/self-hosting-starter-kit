@@ -6,6 +6,7 @@ import {
   getManifest,
   imageVars,
   loadComposeTemplate,
+  renderCompose,
   renderTemplate,
   serviceManifest,
 } from './index';
@@ -61,6 +62,59 @@ describe('jellyfin template', () => {
     const media = compose.services.jellyfin.volumes.filter((v: string) => v.includes('/media/'));
     expect(media).toHaveLength(3);
     for (const volume of media) expect(volume.endsWith(':ro')).toBe(true);
+  });
+});
+
+describe('every service', () => {
+  const context = {
+    puid: 1001,
+    pgid: 1001,
+    tz: 'Europe/Berlin',
+    configDir: '/opt/selfhost/config/x',
+    renderGid: 105,
+    trustedDomains: ['localhost', 'box', '192.168.1.20'],
+  };
+  const names = catalog.map((manifest) => manifest.name);
+
+  it.each(names)('%s renders valid YAML', (name) => {
+    const compose = parse(renderCompose(getManifest(name)!, context));
+    expect(Object.keys(compose.services).length).toBeGreaterThan(0);
+  });
+
+  it.each(names)('%s pins every image', (name) => {
+    const rendered = renderCompose(getManifest(name)!, context);
+    const images = [...rendered.matchAll(/^\s+image: (\S+)$/gm)].map((match) => match[1]!);
+    expect(images.length).toBeGreaterThan(0);
+    for (const image of images) {
+      expect(image).toMatch(/:v?[0-9]/);
+      expect(image).not.toContain(':latest');
+    }
+  });
+
+  it('publishes each service on its own LAN port only', () => {
+    for (const manifest of catalog) {
+      const compose = parse(renderCompose(manifest, context), { merge: true });
+      const published = Object.values<{ ports?: string[] }>(compose.services).flatMap(
+        (service) => service.ports ?? [],
+      );
+      expect(published.map((port) => port.split(':')[0])).toEqual([String(manifest.ports.lan)]);
+    }
+  });
+
+  it('lists the host names Nextcloud should answer to', () => {
+    const compose = parse(renderCompose(getManifest('nextcloud')!, context), { merge: true });
+    expect(compose.services.app.environment.NEXTCLOUD_TRUSTED_DOMAINS).toBe(
+      'localhost box 192.168.1.20',
+    );
+  });
+
+  it('only has credentials that point at a declared secret', () => {
+    for (const manifest of catalog) {
+      const secretNames = manifest.secrets.map((secret) => secret.name);
+      for (const entry of manifest.credentials) {
+        if (entry.secret) expect(secretNames).toContain(entry.secret);
+      }
+    }
   });
 });
 

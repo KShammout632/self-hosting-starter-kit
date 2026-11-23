@@ -19,7 +19,7 @@ import type { DockerClient } from './docker';
 import { AgentError } from './errors';
 import type { HttpChecker, LineStreamer, Runner } from './exec';
 import type { HostFs, Paths } from './host';
-import { serviceHandlers } from './service-handlers';
+import { credentialsPending, serviceHandlers } from './service-handlers';
 import { missingFolders } from './storage';
 import { storageHandlers } from './storage-handlers';
 
@@ -126,6 +126,7 @@ export const handlers: Handlers = {
         ? {
             ok: await deps.httpCheck(
               `http://127.0.0.1:${manifest.ports.lan}${manifest.health.path}`,
+              manifest.health.expect,
             ),
           }
         : null;
@@ -136,6 +137,8 @@ export const handlers: Handlers = {
       containers,
       http,
       missingFolders: await missingFolders(deps, folders).catch(() => []),
+      credentialsPending:
+        state !== 'not_found' && manifest ? await credentialsPending(deps, manifest) : false,
     };
     return { data };
   },

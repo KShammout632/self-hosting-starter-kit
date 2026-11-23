@@ -10,13 +10,19 @@ Each session updates this file before opening its pull request. Newest entry fir
 | M1 First slice: installer + Jellyfin | Done, exit gate passed in CI (`install-gate`) | `m1-installer-jellyfin` |
 | M2 Dashboard core | Done, exit gate passed in CI (`dashboard-gate`) | `m2-dashboard-core` |
 | M3 Storage | Done, exit gate passed (`storage-gate` in CI, and the unplug and reboot test by hand in VirtualBox) | `m3-storage` |
-| M4 All services, wizard, remote access | Not started | |
+| M4a Navidrome, Immich, Nextcloud | Built, `services-gate` CI result pending | `m4a-services` |
+| M4b Tailscale and remote access | Not started, own session | `m4b-remote-access` |
+| M4c Setup wizard | Not started, own session, after M4b | `m4c-wizard` |
 | M5 Updates and docs | Not started | |
 | M6 Beta to 1.0 | Not started | |
 
 ## Next up
 
-Start M4 (all services, wizard, remote access).
+M4 is split into three sub-milestones, run in order, each on its own branch and PR (the M4 exit gate, all four apps working on a phone over mobile data, closes after M4c):
+
+- M4a: Navidrome, Immich and Nextcloud catalog entries, secrets generation, multi-container status, show-once credentials, and the install gate covering all four services. Pin each image to the latest stable release when building.
+- M4b (separate session): agent `tailscale.login`, `tailscale.logout` and `tailscale.serve.apply`, MagicDNS and HTTPS readiness checks, remote URLs and QR codes, Remote access page, Nextcloud trusted domains once the tailnet name is known.
+- M4c (separate session): multi-step setup wizard (password, Tailscale, drives, services) reusing the setup page and the Storage and Remote access components.
 
 ## Later
 
@@ -33,7 +39,9 @@ Ideas and follow-ups found during work that are outside the current milestone.
 - A failed install or start is remembered only in memory, so a dashboard restart clears the red card. The audit log keeps the history.
 - The dashboard image is built on the server during install (it runs `npm install` for two native modules). A release workflow could publish a prebuilt image instead, which would also pin it by digest.
 - `test/vm/m2-gate-inner.sh` has no Multipass wrapper. The browser part of the gate runs in CI only.
-- Setup is a single page (code and password). The multi-step wizard (Tailscale, drives, services) is M4 and should reuse it.
+- Setup is a single page (code and password). The multi-step wizard (Tailscale, drives, services) is M4c and should reuse it.
+- Nextcloud only reads `NEXTCLOUD_TRUSTED_DOMAINS` on its first start. M4b must add the Tailscale name afterwards with `occ config:system:set trusted_domains`, and the same goes for a LAN address that changes.
+- Nextcloud and Immich first-run steps (creating the admin account) are left to the services' own pages, which the getting-started tips point to. Jellyfin's libraries are likewise made by hand.
 
 - Storage: copying files into a new drive (`copyExisting`) uses `rsync` with no progress bar, and the original files stay on the system drive underneath the new mount. Streaming progress and offering to free the old copy are still to do.
 - Storage: a drive that was unmounted from the dashboard mounts again at the next boot, because its unit stays enabled. There is no "forget this drive" action yet.
@@ -55,6 +63,13 @@ Template for each entry:
 - Known issues:
 - Next:
 -->
+
+### 2026-11-23: M4a Navidrome, Immich, Nextcloud
+- Built: catalog entries for Navidrome 0.64.2, Immich v3.4.2 (server, machine learning, Valkey, Postgres with VectorChord) and Nextcloud 35.0.3 (app, cron, Postgres 16, Redis 8), each with a manifest and compose template. New manifest fields: `secrets` (with aliases), `credentials`, `libraryOwnerUid`, `health.expect` and `gpu.imageSuffix`. The agent now generates each service's secrets once into `/opt/selfhost/config/<name>/.env` (root, mode 0600, kept across updates), fills `NEXTCLOUD_TRUSTED_DOMAINS` from the machine's host name and LAN addresses, gives the Nextcloud web user (uid 33) the data folder, checks `"installed":true` in `/status.php`, and uses the OpenVINO machine learning image when the Intel GPU is present. New agent action `service.credentials` returns the Nextcloud admin login once and then refuses; `service.status` reports `credentialsPending`. The API has `POST /api/services/:name/credentials`. The service page shows a "Show my login" card with copy buttons. `test/vm/m4a-gate-inner.sh` and a `services-gate` CI job. 191 unit and integration tests and 32 Playwright tests pass.
+- Decisions made (and why): all image pins are the latest stable releases on 2026-11-23 (owner's choice), taken from Immich's v3.4.2 release compose, without digests (digests belong with the release manifest in M5). Immich and Nextcloud database passwords and the Nextcloud admin password are 32 random bytes in hex. The admin password is shown once through the dashboard, as the plan says, and the agent records that in `.credentials-shown` before replying, so a crash can never show it twice. Nextcloud uses `TRUSTED_PROXIES` (the Docker network range) instead of `OVERWRITEPROTOCOL=https`: the plan's setting would break plain http on the LAN, whereas `tailscale serve` sends `X-Forwarded-Proto: https` and Nextcloud honours it from a trusted proxy. Immich containers run as the `selfhost` user (as in Immich's own rootless compose); Postgres and the Nextcloud app keep their image defaults. Template values may now contain spaces (for the trusted domain list), so templates must quote them.
+- Not tested / needs the owner to check: the `services-gate` CI job has not run yet (see the pull request for its result). Not covered: real hardware, OpenVINO on an Intel GPU, the 4 GB RAM case with all four services, phone apps, and anything over Tailscale (Nextcloud's `TRUSTED_PROXIES` behaviour behind `tailscale serve` is untested until M4b). The Nextcloud and Immich first-run API calls in the gate follow the current upstream APIs and may need adjusting if CI shows otherwise.
+- Known issues: the Nextcloud and Immich database containers also receive the other secrets in the shared `.env` (Nextcloud's admin password reaches its Postgres container). A lost Nextcloud admin password needs `occ user:resetpassword` from a terminal; there is no dashboard action for it yet.
+- Next: M4b (Tailscale and remote access), in its own session.
 
 ### 2026-11-22: M3 Storage
 - Built: agent actions `disk.list` (from `lsblk --json`, with the system disk flagged, free space and a 90 percent warning, and set-up drives that are not plugged in reported as missing), `disk.mount` and `disk.unmount` (systemd mount units named by path, by UUID, `nofail`, `WantedBy=multi-user.target`; ext4, NTFS through `ntfs3` and exFAT, with `uid`, `gid` and `umask` options for the two Windows formats), `disk.format` (wipefs, GPT with one partition, `mkfs.ext4`, mount, standard folders), `disk.smart` (`smartctl --json`, with a retry in SAT mode for USB bridges), `folder.assign` (a bind mount unit with `BindsTo` on the drive, optional `rsync` of existing files) and `folder.usage`. `service.status` now returns `missingFolders`, and the dashboard turns that into the Error state for a running service. The API has `GET /api/storage`, mount, unmount, format, SMART and folder endpoints, with format and copy running in the background and reported as a job. The web app has a Storage page: drives with space and health, set up, unmount ("Safe to unplug"), erase and prepare, and the library folder mapping. The installer now also installs `parted` and `rsync`. `test/vm/m3-gate-inner.sh` and a `storage-gate` CI job.

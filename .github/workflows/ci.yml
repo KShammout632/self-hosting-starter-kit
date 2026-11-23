@@ -132,3 +132,23 @@ jobs:
       - run: cp test/vm/m3-gate-inner.sh test/vm/agent-call.mjs /tmp/bundle/
       - name: Prepare, mount, map, unmount and unplug a disk
         run: sudo bash /tmp/bundle/m3-gate-inner.sh run /tmp/bundle
+
+  # M4a gate: installs the kit, then Navidrome, Immich and Nextcloud, and checks each does real work
+  # (finds a song, stores a photo, accepts a file) with generated secrets kept private.
+  services-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: bash scripts/make-bundle.sh /tmp/bundle
+      - run: cp test/vm/m4a-gate-inner.sh test/vm/agent-call.mjs /tmp/bundle/
+      - name: Install Navidrome, Immich and Nextcloud and use them
+        run: sudo bash /tmp/bundle/m4a-gate-inner.sh /tmp/bundle

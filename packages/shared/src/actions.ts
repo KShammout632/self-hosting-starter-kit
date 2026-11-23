@@ -34,6 +34,7 @@ export const agentRequest = z.discriminatedUnion('action', [
   action('service.restart', service),
   action('service.update', service),
   action('service.status', service),
+  action('service.credentials', service),
 
   action('logs.stream', { ...service, tail: logTail, follow: z.boolean().default(false) }),
   action('logs.download', service),
@@ -90,6 +91,7 @@ const SERVICE_LOCKED_ACTIONS: ReadonlySet<AgentAction> = new Set([
   'service.stop',
   'service.restart',
   'service.update',
+  'service.credentials',
   'snapshot.create',
   'snapshot.restore',
 ]);

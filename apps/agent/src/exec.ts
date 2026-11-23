@@ -100,12 +100,13 @@ export const dryRunRunner: Runner = async (file, args) => {
 };
 
 // Checks a service's health URL on this machine. The URL is built from the catalog, never from a request.
-export type HttpChecker = (url: string) => Promise<boolean>;
+export type HttpChecker = (url: string, expect?: string) => Promise<boolean>;
 
-export const httpCheck: HttpChecker = async (url) => {
+export const httpCheck: HttpChecker = async (url, expect) => {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    return response.status >= 200 && response.status < 400;
+    if (response.status < 200 || response.status >= 400) return false;
+    return expect === undefined || (await response.text()).includes(expect);
   } catch {
     return false;
   }

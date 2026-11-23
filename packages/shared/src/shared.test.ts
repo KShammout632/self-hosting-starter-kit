@@ -17,7 +17,7 @@ describe('agent request schema', () => {
   });
 
   it('lists every v1 action', () => {
-    expect(AGENT_ACTIONS).toHaveLength(29);
+    expect(AGENT_ACTIONS).toHaveLength(30);
     expect(new Set(AGENT_ACTIONS).size).toBe(AGENT_ACTIONS.length);
   });
 
