@@ -12,7 +12,7 @@ Each session updates this file before opening its pull request. Newest entry fir
 | M3 Storage | Done, exit gate passed (`storage-gate` in CI, and the unplug and reboot test by hand in VirtualBox) | `m3-storage` |
 | M4a Navidrome, Immich, Nextcloud | Done, `services-gate` passed in CI and the Nextcloud login was checked by hand in VirtualBox | `m4a-services` |
 | M4b Tailscale and remote access | Done, `tailscale-gate` passed in CI with both parts (sign-in checks and a real tailnet through the `TS_AUTHKEY` secret) | `m4b-remote-access` |
-| M4c Setup wizard | Built, PR open. The browser gate runs in `dashboard-gate`; the phone test that closes M4 is still to do by hand | `m4c-wizard` |
+| M4c Setup wizard | Done, `dashboard-gate` passed in CI with the wizard. The M4 exit gate (all four apps on a phone over mobile data) was run by hand and passed, so M4 is closed | `m4c-wizard` (PR 7) |
 | M5 Updates and docs | Not started | |
 | M6 Beta to 1.0 | Not started | |
 
@@ -22,8 +22,8 @@ M4 is split into three sub-milestones, run in order, each on its own branch and 
 
 - M4a: done.
 - M4b: done.
-- M4c: next.
-- M4c (separate session): multi-step setup wizard (password, Tailscale, drives, services) reusing the setup page and the Storage and Remote access components.
+- M4c: done. The M4 exit gate passed, so M4 is closed.
+- M5: next (kit and service updates with health-check rollback, pre-update snapshots, user guide and troubleshooting docs).
 
 ## Later
 
@@ -40,7 +40,6 @@ Ideas and follow-ups found during work that are outside the current milestone.
 - A failed install or start is remembered only in memory, so a dashboard restart clears the red card. The audit log keeps the history.
 - The dashboard image is built on the server during install (it runs `npm install` for two native modules). A release workflow could publish a prebuilt image instead, which would also pin it by digest.
 - `test/vm/m2-gate-inner.sh` has no Multipass wrapper. The browser part of the gate runs in CI only.
-- Setup is a single page (code and password). The multi-step wizard (Tailscale, drives, services) is M4c and should reuse it.
 - Nextcloud only reads `NEXTCLOUD_TRUSTED_DOMAINS` on its first start. M4b adds the Tailscale name with `occ` when addresses are published. A LAN address that changes later is still not added.
 - Remote access: the server's Tailscale name cannot be changed from the dashboard after connecting (turn remote access off and on again), and the Remote access page does not show which devices are on the tailnet.
 - Remote access: Tailscale login uses `tailscale up` without an auth key by design, so the sign-in page is the only way in. A headless setup with a key would need a new action.
@@ -74,7 +73,7 @@ Template for each entry:
 ### 2026-11-23: M4c Setup wizard
 - Built: a `/wizard` page with five steps: your password (the setup form, moved into a shared `SetupForm`), Reach your server from anywhere (the existing `RemoteAccess` component), Where should your files live (the Storage page's drive list and folder mapping, moved into `components/storage-manager.tsx` so both pages share it), Choose your apps (a new `ServicePicker` that installs the chosen apps one at a time and warns on under 8 GB of memory with three or more chosen) and a final summary with addresses, first-login tips and a link to "Show my login". Only the password step is required. Every later step has Next or Skip for now, and "Skip the rest" ends the guide. The step is kept in the address (`?step=`), so a reload keeps your place. API: a `settings` table (migration 2), `wizardComplete` in the signed-in session info, and `POST /api/wizard/complete` (session and CSRF needed, audited with whether it was skipped). Servers that already had an admin when they upgrade are marked complete by the migration, so they never see the guide. Signed-in users with an unfinished guide are sent to `/wizard` from every other page. Home > Your server > Show details has "Run the setup guide again", which opens the guide with `again=1` so nothing is marked or changed. 219 unit and integration tests and 45 Playwright tests pass.
 - Decisions made (and why): no separate wizard gate script or CI job. The `dashboard-gate` browser test (`apps/web/e2e-gate/gate.spec.ts`) now sets up through the wizard, skips remote access and drives, installs Jellyfin from the apps step, finishes, and then runs the old M2 steps (stop, start, logs, remove, sign out), so one job covers both gates. The planned separate "Welcome" step was folded into the password step. One `complete` endpoint with a `skipped` flag replaces the planned complete and skip pair. The wizard is complete only when the owner presses "Go to my dashboard" or "Skip the rest", not on arriving at the last step.
-- Not tested / needs the owner to check: the `dashboard-gate` job has not run yet (CI will show it on the PR). Not covered anywhere: the real Tailscale browser sign-in inside the wizard, a phone browser, and the M4 exit gate itself (Jellyfin, Navidrome, Immich and Nextcloud apps working on a phone over mobile data), which the owner still has to run by hand with the other M4a and M4b leftovers.
+- Not tested / needs the owner to check: after the PR was opened, the `dashboard-gate` job passed in CI (it sets up through the wizard) and the owner ran the M4 exit gate by hand: all four apps working on a phone over mobile data, through the real Tailscale sign-in. Not recorded as done, so still open: the smaller hand checks listed in the M4a entry (memory use with all four apps on 4 GB, the Intel GPU image on a real mini PC, libraries on a real mounted drive, a second device on the LAN, remove with "keep data" and install again).
 - Known issues: the wizard's first screen asks `/api/remote` for Tailscale status before sign-in and gets a 401, which is harmless. See the Wizard items under Later.
 - Next: M5.
 
