@@ -10,6 +10,7 @@ import { projectName } from './docker';
 import { AgentError } from './errors';
 import type { Deps, Handlers } from './handlers';
 import { parseComposeLine, parseComposeLogs, type LogLine } from './logs';
+import { readStatus } from './tailscale';
 
 async function* toAsync<T>(items: Iterable<T>): AsyncGenerator<T> {
   yield* items;
@@ -64,13 +65,14 @@ const SAFE_HOST = /^[A-Za-z0-9.-]{1,253}$/;
 const VIRTUAL_INTERFACE = /^(docker|br-|veth|virbr|tailscale)/;
 
 // Names this machine answers to, for services that reject requests addressed to an unknown host.
-function trustedDomains(): string[] {
+function trustedDomains(tailnetName: string | null): string[] {
   const addresses = Object.entries(os.networkInterfaces())
     .filter(([name]) => !VIRTUAL_INTERFACE.test(name))
     .flatMap(([, entries]) => entries ?? [])
     .filter((entry) => entry.family === 'IPv4' && !entry.internal)
     .map((entry) => entry.address);
   const names = ['localhost', '127.0.0.1', os.hostname(), ...addresses];
+  if (tailnetName) names.push(tailnetName);
   return [...new Set(names)].filter((name) => SAFE_HOST.test(name));
 }
 
@@ -160,6 +162,10 @@ async function writeService(deps: Deps, manifest: ServiceManifest): Promise<void
   const uid = await serviceUserId(deps, '-u');
   const gid = await serviceUserId(deps, '-g');
   const configDir = `${deps.paths.configDir}/${manifest.name}`;
+  const tailnetName = await readStatus(deps).then(
+    (status) => status.dnsName,
+    () => null,
+  );
   const renderGid = manifest.gpu.intel ? await deps.fs.gidOf(deps.paths.renderDevice) : null;
 
   const rendered = renderCompose(manifest, {
@@ -168,7 +174,7 @@ async function writeService(deps: Deps, manifest: ServiceManifest): Promise<void
     tz: timezone(),
     configDir,
     renderGid,
-    trustedDomains: trustedDomains(),
+    trustedDomains: trustedDomains(tailnetName),
   });
 
   const owner = { uid, gid };

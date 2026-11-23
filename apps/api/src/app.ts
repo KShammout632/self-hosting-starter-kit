@@ -17,6 +17,7 @@ import { AgentRequestError, type AgentCall, type AgentClient } from './agent-cli
 import type { AuditLog } from './audit';
 import { REAUTH_AFTER_MS, SESSION_TTL_MS, type Auth } from './auth';
 import type { StatusMonitor } from './monitor';
+import { registerRemoteRoutes } from './remote-routes';
 import { registerStorageRoutes } from './storage-routes';
 
 const COOKIE = 'selfhost_session';
@@ -268,6 +269,8 @@ export async function buildApp(deps: AppDeps) {
 
     secured.get('/api/services', async () => monitor.snapshot());
 
+    const remote = registerRemoteRoutes(secured, { agent, audit, monitor, now, sendError });
+
     const parseService = (request: FastifyRequest, reply: FastifyReply): ServiceName | null => {
       const parsed = serviceName.safeParse((request.params as { name?: string }).name);
       if (!parsed.success || !monitor.isAvailable(parsed.data)) {
@@ -299,6 +302,9 @@ export async function buildApp(deps: AppDeps) {
           await task();
           audit.record({ actor: 'admin', event, target: service, outcome: 'ok' });
           await monitor.endAction(service);
+          if (event === 'service.install' || event === 'service.uninstall') {
+            void remote.sync().catch(() => undefined);
+          }
         } catch (error) {
           audit.record({
             actor: 'admin',

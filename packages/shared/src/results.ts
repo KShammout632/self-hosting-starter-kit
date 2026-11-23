@@ -56,8 +56,21 @@ export const tailscaleStatusResult = z.object({
   backendState: z.string().nullable(),
   hostname: z.string().nullable(),
   dnsName: z.string().nullable(),
+  // The page the owner opens to sign this server in to Tailscale. Only present while it waits for that.
+  authUrl: z.string().nullable(),
+  // Both must be switched on in the Tailscale admin console before https addresses work.
+  magicDnsEnabled: z.boolean(),
+  httpsEnabled: z.boolean(),
 });
 export type TailscaleStatusResult = z.infer<typeof tailscaleStatusResult>;
+
+export const remoteTarget = z.union([serviceName, z.literal('dashboard')]);
+export type RemoteTarget = z.infer<typeof remoteTarget>;
+
+export const tailscaleServeResult = z.object({
+  urls: z.array(z.object({ target: remoteTarget, url: z.string() })),
+});
+export type TailscaleServeResult = z.infer<typeof tailscaleServeResult>;
 
 export const confirmIssueResult = z.object({ token: z.string(), expiresInSeconds: z.number() });
 export type ConfirmIssueResult = z.infer<typeof confirmIssueResult>;

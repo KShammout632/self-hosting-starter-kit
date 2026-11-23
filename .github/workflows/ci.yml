@@ -152,3 +152,28 @@ jobs:
       - run: cp test/vm/m4a-gate-inner.sh test/vm/agent-call.mjs /tmp/bundle/
       - name: Install Navidrome, Immich and Nextcloud and use them
         run: sudo bash /tmp/bundle/m4a-gate-inner.sh /tmp/bundle
+
+  # M4b gate: the Tailscale actions. The sign-in checks need only internet access. The tailnet checks
+  # (publish addresses, fetch them over https, Nextcloud trusted domains) run when the repository has
+  # a TS_AUTHKEY secret: an ephemeral, reusable auth key from a throwaway tailnet with MagicDNS and
+  # HTTPS certificates turned on. Pull requests from forks do not get secrets, so they skip that part.
+  tailscale-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: bash scripts/make-bundle.sh /tmp/bundle
+      - run: cp test/vm/m4b-gate-inner.sh test/vm/agent-call.mjs /tmp/bundle/
+      - name: Sign in, publish addresses and open them over https
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: sudo --preserve-env=TS_AUTHKEY,GITHUB_RUN_ID bash /tmp/bundle/m4b-gate-inner.sh /tmp/bundle

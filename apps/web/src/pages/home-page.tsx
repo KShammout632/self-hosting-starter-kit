@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { BUSY_LABEL, formatBytes, isRunning, useStatus } from '@/lib/status';
+import { useRemoteLink } from '@/lib/use-remote';
 import { useServiceAction } from '@/lib/use-service-action';
 
 export const serviceUrl = (service: ServiceSummary) =>
@@ -96,6 +97,7 @@ function SystemCard({ system }: { system: SystemSummary }) {
 
 function ServiceCard({ service }: { service: ServiceSummary }) {
   const actions = useServiceAction();
+  const remoteLink = useRemoteLink(service.name);
   const busy = service.busy !== null;
   const running = isRunning(service.status);
 
@@ -139,6 +141,13 @@ function ServiceCard({ service }: { service: ServiceSummary }) {
           <Button asChild>
             <a href={serviceUrl(service)} target="_blank" rel="noreferrer">
               Open
+            </a>
+          </Button>
+        ) : null}
+        {running && remoteLink ? (
+          <Button variant="outline" asChild>
+            <a href={remoteLink.url} target="_blank" rel="noreferrer">
+              Open from anywhere
             </a>
           </Button>
         ) : null}

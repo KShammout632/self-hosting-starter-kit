@@ -11,7 +11,6 @@ import {
   type ContainerSummary,
   type ServiceStatusResult,
   type SystemInfoResult,
-  type TailscaleStatusResult,
 } from '@selfhost/shared';
 import pkg from '../package.json' with { type: 'json' };
 import { CONFIRM_TTL_MS, type ConfirmTokens } from './confirm';
@@ -22,6 +21,7 @@ import type { HostFs, Paths } from './host';
 import { credentialsPending, serviceHandlers } from './service-handlers';
 import { missingFolders } from './storage';
 import { storageHandlers } from './storage-handlers';
+import { tailscaleHandlers } from './tailscale';
 
 export interface Deps {
   dryRun: boolean;
@@ -57,22 +57,10 @@ export function deriveServiceState(containers: ContainerSummary[]): ServiceStatu
   return running === 0 ? 'stopped' : 'partial';
 }
 
-const parseTailscale = (stdout: string): TailscaleStatusResult => {
-  const status = JSON.parse(stdout) as {
-    BackendState?: string;
-    Self?: { HostName?: string; DNSName?: string };
-  };
-  return {
-    installed: true,
-    backendState: status.BackendState ?? null,
-    hostname: status.Self?.HostName ?? null,
-    dnsName: status.Self?.DNSName?.replace(/\.$/, '') ?? null,
-  };
-};
-
 export const handlers: Handlers = {
   ...serviceHandlers,
   ...storageHandlers,
+  ...tailscaleHandlers,
 
   async 'agent.version'(_request, deps) {
     const data: AgentVersionResult = { version: pkg.version, dryRun: deps.dryRun };
@@ -141,22 +129,5 @@ export const handlers: Handlers = {
         state !== 'not_found' && manifest ? await credentialsPending(deps, manifest) : false,
     };
     return { data };
-  },
-
-  async 'tailscale.status'(_request, deps) {
-    try {
-      return { data: parseTailscale(await deps.run('tailscale', ['status', '--json'])) };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        const data: TailscaleStatusResult = {
-          installed: false,
-          backendState: null,
-          hostname: null,
-          dnsName: null,
-        };
-        return { data };
-      }
-      throw new AgentError('failed', 'Tailscale did not respond.');
-    }
   },
 };

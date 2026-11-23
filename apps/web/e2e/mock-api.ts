@@ -3,6 +3,7 @@ import {
   LIBRARY_FOLDERS,
   type DiskInfo,
   type FolderUsageResult,
+  type RemoteSnapshot,
   type ServiceSummary,
   type SessionInfo,
   type SmartResult,
@@ -84,7 +85,31 @@ export const jellyfin = (overrides: Partial<ServiceSummary> = {}): ServiceSummar
   ...overrides,
 });
 
+export const newRemote = (overrides: Partial<RemoteSnapshot> = {}): RemoteSnapshot => ({
+  state: 'signed_out',
+  name: 'homeserver',
+  signInUrl: null,
+  magicDnsEnabled: false,
+  httpsEnabled: false,
+  settingsUrl: 'https://login.tailscale.com/admin/dns',
+  links: [],
+  message: null,
+  ...overrides,
+});
+
+export const readyRemote = (): RemoteSnapshot =>
+  newRemote({
+    state: 'ready',
+    magicDnsEnabled: true,
+    httpsEnabled: true,
+    links: [
+      { target: 'dashboard', label: 'Dashboard', url: 'https://homeserver.tail1234.ts.net' },
+      { target: 'jellyfin', label: 'Jellyfin', url: 'https://homeserver.tail1234.ts.net:8920' },
+    ],
+  });
+
 export interface MockState {
+  remote: RemoteSnapshot;
   session: SessionInfo;
   service: ServiceSummary;
   agentReachable: boolean;
@@ -99,6 +124,7 @@ export interface MockState {
 export function newState(overrides: Partial<MockState> = {}): MockState {
   return {
     session: { state: 'logged_in', csrfToken: 'csrf-test', reauthRequired: false },
+    remote: newRemote(),
     service: jellyfin(),
     agentReachable: true,
     logLines: ['Server startup complete', '[ERR] Could not write /srv/media: Permission denied'],
@@ -189,6 +215,26 @@ export async function mockApi(page: Page, state: MockState) {
 
     if (path === '/api/services') return json(route, 200, snapshot(state));
     if (path === '/api/status/stream') return events(route, [['status', snapshot(state)]]);
+
+    if (path === '/api/remote') return json(route, 200, state.remote);
+    if (path === '/api/remote/connect' && method === 'POST') {
+      state.remote = newRemote({
+        state: 'waiting_for_sign_in',
+        name: body.name,
+        signInUrl: 'https://login.tailscale.com/a/abc123',
+      });
+      return json(route, 200, state.remote);
+    }
+    if (path === '/api/remote/disconnect' && method === 'POST') {
+      if (state.reauthNeeded) {
+        return json(route, 403, {
+          error: 'reauth_required',
+          message: 'Enter your password to continue.',
+        });
+      }
+      state.remote = newRemote();
+      return json(route, 200, state.remote);
+    }
 
     if (path === '/api/storage') return json(route, 200, state.storage);
 

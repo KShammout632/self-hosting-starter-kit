@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { BUSY_LABEL, isRunning, useStatus } from '@/lib/status';
+import { useRemoteLink } from '@/lib/use-remote';
 import { useServiceAction } from '@/lib/use-service-action';
 import { serviceUrl } from './home-page';
 
@@ -86,6 +87,7 @@ export function ServicePage() {
   const { name } = useParams();
   const status = useStatus();
   const actions = useServiceAction();
+  const remoteLink = useRemoteLink(name);
   const [removing, setRemoving] = useState(false);
   const [revealed, setRevealed] = useState<ServiceCredentialsResult['credentials'] | null>(null);
 
@@ -139,6 +141,13 @@ export function ServicePage() {
             <Button asChild>
               <a href={serviceUrl(service)} target="_blank" rel="noreferrer">
                 Open {service.displayName}
+              </a>
+            </Button>
+          ) : null}
+          {running && remoteLink ? (
+            <Button variant="outline" asChild>
+              <a href={remoteLink.url} target="_blank" rel="noreferrer">
+                Open from anywhere
               </a>
             </Button>
           ) : null}

@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ServiceStatusResult } from '@selfhost/shared';
+import type { ServiceStatusResult, TailscaleStatusResult } from '@selfhost/shared';
 import { AgentRequestError, type AgentCall, type AgentClient } from './agent-client';
 import { type AppDeps, buildApp } from './app';
 import { createAuditLog } from './audit';
@@ -24,7 +24,29 @@ export interface FakeAgent extends AgentClient {
   credentialsPending: boolean;
   disks: unknown[];
   mappedFolders: Record<string, { mountLabel: string; subpath: string }>;
+  tailscale: TailscaleStatusResult;
+  onlyService: string | null;
 }
+
+export const SIGNED_OUT: TailscaleStatusResult = {
+  installed: true,
+  backendState: 'NeedsLogin',
+  hostname: null,
+  dnsName: null,
+  authUrl: null,
+  magicDnsEnabled: false,
+  httpsEnabled: false,
+};
+
+export const CONNECTED: TailscaleStatusResult = {
+  installed: true,
+  backendState: 'Running',
+  hostname: 'box',
+  dnsName: 'box.tail1234.ts.net',
+  authUrl: null,
+  magicDnsEnabled: true,
+  httpsEnabled: true,
+};
 
 export function createFakeAgent(): FakeAgent {
   const agent: FakeAgent = {
@@ -39,23 +61,27 @@ export function createFakeAgent(): FakeAgent {
     credentialsPending: false,
     disks: [],
     mappedFolders: {},
+    tailscale: SIGNED_OUT,
+    onlyService: null,
     async call(request) {
       if (agent.unreachable) throw new AgentRequestError('unreachable', 'down');
       agent.calls.push(request);
       if (request.action === 'service.status') {
+        const absent = agent.onlyService !== null && request.service !== agent.onlyService;
+        const state = absent ? 'not_found' : agent.serviceState;
         return {
-          service: 'jellyfin',
-          state: agent.serviceState,
-          http: agent.serviceState === 'running' ? { ok: agent.httpOk } : null,
+          service: request.service,
+          state,
+          http: state === 'running' ? { ok: agent.httpOk } : null,
           missingFolders: agent.missingFolders,
           credentialsPending: agent.credentialsPending,
           containers:
-            agent.serviceState === 'not_found'
+            state === 'not_found'
               ? []
               : [
                   {
                     name: 'selfhost-jellyfin-1',
-                    state: agent.serviceState === 'running' ? 'running' : 'exited',
+                    state: state === 'running' ? 'running' : 'exited',
                     health: null,
                     startedAt: new Date().toISOString(),
                   },
@@ -99,6 +125,18 @@ export function createFakeAgent(): FakeAgent {
         }
         agent.credentialsPending = false;
         return { credentials: [{ label: 'Admin password', value: 'secret-value' }] } as never;
+      }
+      if (request.action === 'tailscale.status') return agent.tailscale as never;
+      if (request.action === 'tailscale.login') {
+        agent.tailscale = {
+          ...SIGNED_OUT,
+          authUrl: 'https://login.tailscale.com/a/abc',
+        };
+        return agent.tailscale as never;
+      }
+      if (request.action === 'tailscale.logout') {
+        agent.tailscale = SIGNED_OUT;
+        return agent.tailscale as never;
       }
       if (request.action === 'confirm.issue') {
         return { token: 'T'.repeat(43), expiresInSeconds: 300 } as never;
