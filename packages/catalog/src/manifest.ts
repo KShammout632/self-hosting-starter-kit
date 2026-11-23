@@ -28,10 +28,6 @@ export const serviceManifest = z
               .refine((tag) => tag !== 'latest', 'Image tags must be pinned'),
             // Pins the exact image, so a re-tagged or tampered tag is never pulled.
             digest: digest.optional(),
-            // For the one image that has a different build with the Intel GPU on. It takes the
-            // GPU suffix, and its own digest when one is known.
-            gpuVariant: z.boolean().default(false),
-            gpuDigest: digest.optional(),
           })
           .strict(),
       )
@@ -94,16 +90,7 @@ export const serviceManifest = z
           .optional(),
       })
       .strict(),
-    gpu: z
-      .object({
-        intel: z.boolean(),
-        // Added to the image tag when the GPU is used, for example -openvino.
-        imageSuffix: z
-          .string()
-          .regex(/^-[a-z0-9]+$/)
-          .optional(),
-      })
-      .strict(),
+    gpu: z.object({ intel: z.boolean() }).strict(),
     firstLoginTips: z.array(z.string().min(1)).min(1),
   })
   .strict();

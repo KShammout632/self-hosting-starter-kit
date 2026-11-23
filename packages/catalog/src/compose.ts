@@ -18,7 +18,7 @@ export interface ComposeContext {
 export function renderCompose(manifest: ServiceManifest, context: ComposeContext): string {
   const gpu = manifest.gpu.intel && context.renderGid !== null;
   const vars: TemplateVars = {
-    ...imageVars(manifest, gpu),
+    ...imageVars(manifest),
     PUID: context.puid,
     PGID: context.pgid,
     TZ: context.tz,

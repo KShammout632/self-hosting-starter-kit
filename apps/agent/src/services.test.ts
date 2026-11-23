@@ -142,12 +142,12 @@ describe('Navidrome, Immich and Nextcloud', () => {
     );
   });
 
-  it('uses the OpenVINO build of machine learning only with an Intel GPU', async () => {
+  it('runs machine learning on the CPU even when an Intel GPU is present', async () => {
     const host = makeHost({ renderGid: 105 });
     await installService(host.deps, 'immich');
     const ml = composeOf(host, 'immich').services['immich-machine-learning'];
-    expect(ml.image).toBe('ghcr.io/immich-app/immich-machine-learning:v3.4.2-openvino');
-    expect(ml.devices).toEqual(['/dev/dri:/dev/dri']);
+    expect(ml.image).toMatch(/immich-machine-learning:v3\.4\.2@sha256:/);
+    expect(ml.devices).toBeUndefined();
     expect(ml.mem_limit).toBe('3g');
   });
 

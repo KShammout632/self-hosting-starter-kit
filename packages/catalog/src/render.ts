@@ -37,26 +37,17 @@ export function renderTemplate(template: string, vars: TemplateVars): string {
   return rendered;
 }
 
-// The image reference for one container, for example repo:tag@sha256:... Pass gpu to get the
-// Intel GPU build of the image that has one.
-export function imageRef(
-  manifest: ServiceManifest,
-  image: ServiceManifest['images'][number],
-  gpu = false,
-): string {
-  if (gpu && image.gpuVariant) {
-    const tag = `${image.tag}${manifest.gpu.imageSuffix ?? ''}`;
-    return `${image.repository}:${tag}${image.gpuDigest ? `@${image.gpuDigest}` : ''}`;
-  }
+// The image reference for one container, for example repo:tag@sha256:...
+export function imageRef(image: ServiceManifest['images'][number]): string {
   return `${image.repository}:${image.tag}${image.digest ? `@${image.digest}` : ''}`;
 }
 
 // Maps each container to an IMAGE_<NAME> variable so the manifest is the only place pins live.
-export function imageVars(manifest: ServiceManifest, gpu = false): TemplateVars {
+export function imageVars(manifest: ServiceManifest): TemplateVars {
   return Object.fromEntries(
     manifest.images.map((image) => [
       `IMAGE_${image.container.toUpperCase().replaceAll('-', '_')}`,
-      imageRef(manifest, image, gpu),
+      imageRef(image),
     ]),
   );
 }

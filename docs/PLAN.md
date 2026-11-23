@@ -296,7 +296,7 @@ Each service is an independent Compose project with pinned image versions, its c
 - Generate the compose file from Immich's official release compose and `.env`, pinned to a tested version. Immich ships breaking changes often, so updates only move to versions the kit has tested
 - Generate a random `DB_PASSWORD` at install time and store it in `/opt/selfhost/config/immich/.env` (mode 0600)
 - Postgres data lives on the system SSD (`/opt/selfhost/config/immich/db`), never on a USB or network drive
-- Enable Intel OpenVINO for the machine-learning container when the GPU is present
+- Machine learning runs on the CPU in v1. The Intel OpenVINO build is left out because upstream has not published it for the pinned release (revisit at M6 hardware testing)
 - Health check: `GET /api/server/ping`
 
 **Nextcloud**

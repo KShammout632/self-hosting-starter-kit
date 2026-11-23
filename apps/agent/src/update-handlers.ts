@@ -36,11 +36,7 @@ export async function updateInfo(
   const text = await deps.fs.readFile(composeFile(deps, manifest.name));
   if (text === null) return null;
   const installed = new Set([...text.matchAll(IMAGE_LINE)].map((match) => match[1]!));
-  const upToDate = manifest.images.every(
-    (image) =>
-      installed.has(imageRef(manifest, image, false)) ||
-      installed.has(imageRef(manifest, image, true)),
-  );
+  const upToDate = manifest.images.every((image) => installed.has(imageRef(image)));
   const version = (await deps.fs.readFile(versionFile(deps, manifest.name)))?.trim() || null;
   return {
     available: !upToDate,
