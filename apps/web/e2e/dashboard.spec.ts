@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test';
 import { jellyfin, mockApi, newState } from './mock-api';
 
 test.describe('setup and sign in', () => {
-  test('first run: enter the setup code, choose a password, land on the home page', async ({
+  test('first run: enter the setup code, choose a password, move on to the setup guide', async ({
     page,
   }) => {
     const state = newState({ session: { state: 'setup_required' } });
     await mockApi(page, state);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Set up your server' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /set up your server/i })).toBeVisible();
     await page.getByLabel('Setup code').fill('ABCD-2345');
     await page.getByLabel('New password').fill('short');
     await page.getByLabel('Type the password again').fill('short');
@@ -23,7 +23,9 @@ test.describe('setup and sign in', () => {
 
     await page.getByLabel('Type the password again').fill('a long enough password');
     await page.getByRole('button', { name: 'Create account' }).click();
-    await expect(page.getByRole('heading', { name: 'Jellyfin' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Reach your server from anywhere' }),
+    ).toBeVisible();
     expect(state.requests[0]).toMatchObject({
       path: '/api/setup',
       body: { code: 'ABCD-2345', password: 'a long enough password' },

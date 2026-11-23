@@ -67,7 +67,7 @@ export interface StatusSnapshot {
 export type SessionInfo =
   | { state: 'setup_required' }
   | { state: 'logged_out'; setupAvailable: boolean }
-  | { state: 'logged_in'; csrfToken: string; reauthRequired: boolean };
+  | { state: 'logged_in'; csrfToken: string; reauthRequired: boolean; wizardComplete: boolean };
 
 export interface ApiErrorBody {
   error: string;

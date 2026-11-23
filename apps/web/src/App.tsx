@@ -10,6 +10,7 @@ import { HomePage } from '@/pages/home-page';
 import { RemotePage } from '@/pages/remote-page';
 import { ServicePage } from '@/pages/service-page';
 import { StoragePage } from '@/pages/storage-page';
+import { WizardPage } from '@/pages/wizard-page';
 
 function AgentBanner() {
   const status = useStatus();
@@ -96,8 +97,9 @@ function RequireSession() {
       </p>
     );
   }
-  if (session.data.state === 'setup_required') return <Navigate to="/setup" replace />;
+  if (session.data.state === 'setup_required') return <Navigate to="/wizard" replace />;
   if (session.data.state === 'logged_out') return <Navigate to="/login" replace />;
+  if (!session.data.wizardComplete) return <Navigate to="/wizard" replace />;
   return <Layout />;
 }
 
@@ -106,6 +108,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/setup" element={<SetupPage />} />
+        <Route path="/wizard" element={<WizardPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireSession />}>
           <Route path="/" element={<HomePage />} />

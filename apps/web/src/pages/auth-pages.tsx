@@ -7,7 +7,15 @@ import { Input } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api';
 import { useSession, useSetSession } from '@/lib/session';
 
-function Shell({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
+export function Shell({
+  title,
+  intro,
+  children,
+}: {
+  title: string;
+  intro: string;
+  children: ReactNode;
+}) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4 py-10">
       <Card className="w-full space-y-4">
@@ -40,20 +48,13 @@ function Field({
 const messageOf = (error: unknown) =>
   error instanceof ApiError ? error.message : 'Something went wrong. Please try again.';
 
-export function SetupPage() {
-  const session = useSession();
+export function SetupForm({ onDone }: { onDone: () => void }) {
   const setSession = useSetSession();
-  const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  if (session.data?.state === 'logged_in') return <Navigate to="/" replace />;
-  if (session.data?.state === 'logged_out' && !session.data.setupAvailable) {
-    return <Navigate to="/login" replace />;
-  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -65,7 +66,7 @@ export function SetupPage() {
       setSession(
         await api<SessionInfo>('/api/setup', { method: 'POST', body: { code, password } }),
       );
-      navigate('/', { replace: true });
+      onDone();
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
@@ -74,46 +75,61 @@ export function SetupPage() {
   };
 
   return (
+    <form onSubmit={submit} className="space-y-4">
+      <Field
+        id="code"
+        label="Setup code"
+        hint="It looks like ABCD-EFGH."
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        autoComplete="off"
+        autoFocus
+      />
+      <Field
+        id="password"
+        label="New password"
+        hint="At least 10 characters."
+        type="password"
+        autoComplete="new-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+      />
+      <Field
+        id="confirm"
+        label="Type the password again"
+        type="password"
+        autoComplete="new-password"
+        value={confirm}
+        onChange={(event) => setConfirm(event.target.value)}
+      />
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" className="w-full" disabled={busy || code === '' || password === ''}>
+        Create account
+      </Button>
+    </form>
+  );
+}
+
+export function SetupPage() {
+  const session = useSession();
+  const navigate = useNavigate();
+
+  if (session.data?.state === 'setup_required') return <Navigate to="/wizard" replace />;
+  if (session.data?.state === 'logged_in') return <Navigate to="/" replace />;
+  if (session.data?.state === 'logged_out' && !session.data.setupAvailable) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
     <Shell
       title="Set up your server"
       intro="Enter the setup code the installer showed on the server, then choose a password for this dashboard."
     >
-      <form onSubmit={submit} className="space-y-4">
-        <Field
-          id="code"
-          label="Setup code"
-          hint="It looks like ABCD-EFGH."
-          value={code}
-          onChange={(event) => setCode(event.target.value)}
-          autoComplete="off"
-          autoFocus
-        />
-        <Field
-          id="password"
-          label="New password"
-          hint="At least 10 characters."
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <Field
-          id="confirm"
-          label="Type the password again"
-          type="password"
-          autoComplete="new-password"
-          value={confirm}
-          onChange={(event) => setConfirm(event.target.value)}
-        />
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-        <Button type="submit" className="w-full" disabled={busy || code === '' || password === ''}>
-          Create account
-        </Button>
-      </form>
+      <SetupForm onDone={() => navigate('/', { replace: true })} />
     </Shell>
   );
 }
@@ -128,7 +144,7 @@ export function LoginPage() {
   const [showHelp, setShowHelp] = useState(false);
 
   if (session.data?.state === 'logged_in') return <Navigate to="/" replace />;
-  if (session.data?.state === 'setup_required') return <Navigate to="/setup" replace />;
+  if (session.data?.state === 'setup_required') return <Navigate to="/wizard" replace />;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

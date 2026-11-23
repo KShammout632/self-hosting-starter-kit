@@ -91,6 +91,11 @@ function SystemCard({ system }: { system: SystemSummary }) {
           </div>
         </dl>
       ) : null}
+      {details ? (
+        <Link className="text-sm text-primary underline" to="/wizard?step=remote&again=1">
+          Run the setup guide again
+        </Link>
+      ) : null}
     </Card>
   );
 }
