@@ -40,6 +40,7 @@ interface ServiceState {
   lastFailure: string | null;
   errorCount: number;
   hints: string[];
+  credentialsPending: boolean;
   logScanAt: number;
 }
 
@@ -58,6 +59,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         lastFailure: null,
         errorCount: 0,
         hints: [],
+        credentialsPending: false,
         logScanAt: 0,
       },
     ]),
@@ -86,6 +88,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         busy: state.busy,
         errorCount: state.errorCount,
         hints: state.hints,
+        credentialsPending: state.credentialsPending,
       };
     }),
   });
@@ -137,6 +140,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
       });
       state.status = computed.status;
       state.message = computed.message;
+      state.credentialsPending = result.credentialsPending;
       if (result.state === 'not_found') {
         state.errorCount = 0;
         state.hints = [];

@@ -25,8 +25,15 @@ export const serviceStatusResult = z.object({
   http: z.object({ ok: z.boolean() }).nullable(),
   // Library folders this service needs whose drive is not mounted right now.
   missingFolders: z.array(libraryFolder),
+  // True while the owner has not yet been shown this service's one-time login details.
+  credentialsPending: z.boolean(),
 });
 export type ServiceStatusResult = z.infer<typeof serviceStatusResult>;
+
+export const serviceCredentialsResult = z.object({
+  credentials: z.array(z.object({ label: z.string(), value: z.string() })),
+});
+export type ServiceCredentialsResult = z.infer<typeof serviceCredentialsResult>;
 
 export const systemInfoResult = z.object({
   hostname: z.string(),

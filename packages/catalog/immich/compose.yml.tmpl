@@ -1,0 +1,64 @@
+name: selfhost-immich
+services:
+  immich-server:
+    image: {{IMAGE_IMMICH_SERVER}}
+    container_name: selfhost-immich-server
+    restart: unless-stopped
+    user: "{{PUID}}:{{PGID}}"
+    env_file:
+      - {{CONFIG_DIR}}/.env
+    environment:
+      TZ: "{{TZ}}"
+      DB_HOSTNAME: database
+      DB_USERNAME: immich
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: redis
+    ports:
+      - "{{LAN_PORT}}:2283"
+    volumes:
+      - {{PHOTOS_DIR}}:/data
+    depends_on:
+      - redis
+      - database
+
+  immich-machine-learning:
+    image: {{IMAGE_IMMICH_MACHINE_LEARNING}}{{GPU_IMAGE_SUFFIX}}
+    container_name: selfhost-immich-machine-learning
+    restart: unless-stopped
+    user: "{{PUID}}:{{PGID}}"
+    mem_limit: 3g
+    environment:
+      TZ: "{{TZ}}"
+      MACHINE_LEARNING_MODEL_REVISION: v2
+    volumes:
+      - {{CONFIG_DIR}}/ml-cache:/cache
+{{#if GPU}}
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "{{RENDER_GID}}"
+{{/if}}
+
+  redis:
+    image: {{IMAGE_REDIS}}
+    container_name: selfhost-immich-redis
+    restart: unless-stopped
+    user: "{{PUID}}:{{PGID}}"
+    volumes:
+      - {{CONFIG_DIR}}/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG || exit 1"]
+
+  database:
+    image: {{IMAGE_DATABASE}}
+    container_name: selfhost-immich-database
+    restart: unless-stopped
+    env_file:
+      - {{CONFIG_DIR}}/.env
+    environment:
+      POSTGRES_USER: immich
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - {{CONFIG_DIR}}/db:/var/lib/postgresql/data
+    shm_size: 128mb

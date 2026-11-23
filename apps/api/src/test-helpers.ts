@@ -21,6 +21,7 @@ export interface FakeAgent extends AgentClient {
   unreachable: boolean;
   httpOk: boolean;
   missingFolders: string[];
+  credentialsPending: boolean;
   disks: unknown[];
   mappedFolders: Record<string, { mountLabel: string; subpath: string }>;
 }
@@ -35,6 +36,7 @@ export function createFakeAgent(): FakeAgent {
     unreachable: false,
     httpOk: true,
     missingFolders: [],
+    credentialsPending: false,
     disks: [],
     mappedFolders: {},
     async call(request) {
@@ -46,6 +48,7 @@ export function createFakeAgent(): FakeAgent {
           state: agent.serviceState,
           http: agent.serviceState === 'running' ? { ok: agent.httpOk } : null,
           missingFolders: agent.missingFolders,
+          credentialsPending: agent.credentialsPending,
           containers:
             agent.serviceState === 'not_found'
               ? []
@@ -89,6 +92,13 @@ export function createFakeAgent(): FakeAgent {
           totalBytes: null,
           nearlyFull: false,
         } as never;
+      }
+      if (request.action === 'service.credentials') {
+        if (!agent.credentialsPending) {
+          throw new AgentRequestError('refused', 'The login details were already shown.');
+        }
+        agent.credentialsPending = false;
+        return { credentials: [{ label: 'Admin password', value: 'secret-value' }] } as never;
       }
       if (request.action === 'confirm.issue') {
         return { token: 'T'.repeat(43), expiresInSeconds: 300 } as never;

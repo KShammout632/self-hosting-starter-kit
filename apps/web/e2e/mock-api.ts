@@ -80,6 +80,7 @@ export const jellyfin = (overrides: Partial<ServiceSummary> = {}): ServiceSummar
   busy: null,
   errorCount: 0,
   hints: [],
+  credentialsPending: false,
   ...overrides,
 });
 
@@ -249,6 +250,22 @@ export async function mockApi(page: Page, state: MockState) {
           { ts: '2026-11-22T10:00:00Z', line },
         ]),
       ]);
+    }
+
+    if (/^\/api\/services\/[a-z]+\/credentials$/.test(path) && method === 'POST') {
+      if (!state.service.credentialsPending) {
+        return json(route, 409, {
+          error: 'already_shown',
+          message: 'That was already shown once and cannot be shown again.',
+        });
+      }
+      state.service = { ...state.service, credentialsPending: false };
+      return json(route, 200, {
+        credentials: [
+          { label: 'Admin user name', value: 'admin' },
+          { label: 'Admin password', value: 'correct-horse-battery' },
+        ],
+      });
     }
 
     const action = /^\/api\/services\/[a-z]+\/([a-z]+)$/.exec(path);

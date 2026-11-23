@@ -429,7 +429,7 @@ Build a thin, working slice first (installer plus Jellyfin), then add the dashbo
 | M1 First slice: installer + Jellyfin | install.sh (preflight, Docker, Tailscale, folders, systemd agent); agent service actions; Jellyfin managed from a CLI helper | Fresh VM install plays a video from /srv/media |
 | M2 Dashboard core | Login, setup code, service cards with live status; service detail page, live logs over SSE, error hints | Start, stop and read logs from the browser only |
 | M3 Storage | Disk list, mount by UUID, format ext4, folder mapping; SMART health, free space warnings, safe unplug | USB unplug and reboot test passes |
-| M4 All services, wizard, remote access | Navidrome, Immich and Nextcloud catalog entries; setup wizard, Tailscale login, tailscale serve, QR codes | All four apps work on a phone over mobile data |
+| M4 All services, wizard, remote access | Built in three sub-milestones. M4a: Navidrome, Immich and Nextcloud catalog entries. M4b: Tailscale login, tailscale serve, QR codes. M4c: setup wizard | All four apps work on a phone over mobile data (closes after M4c) |
 | M5 Updates and docs | Kit and service updates with health-check rollback; pre-update snapshots, user guide and troubleshooting docs | Upgrade test passes and docs reviewed |
 | M6 Beta to 1.0 | Mini PC hardware testing, security review of the agent; public beta, fix feedback, tag 1.0 | 1.0 released |
 

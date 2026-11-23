@@ -9,6 +9,7 @@ import {
   serviceName,
   type BusyAction,
   type ConfirmIssueResult,
+  type ServiceCredentialsResult,
   type ServiceName,
   type SessionInfo,
 } from '@selfhost/shared';
@@ -70,6 +71,8 @@ export function describeAgentError(error: unknown): string {
         return 'This service is not installed yet.';
       case 'not_implemented':
         return 'This service is not available yet.';
+      case 'refused':
+        return 'That was already shown once and cannot be shown again.';
       case 'unreachable':
       case 'timeout':
         return 'The dashboard could not reach the server helper.';
@@ -319,6 +322,41 @@ export async function buildApp(deps: AppDeps) {
         });
       });
     }
+
+    // The agent returns these once and then refuses, so the page must show them straight away.
+    secured.post('/api/services/:name/credentials', async (request, reply) => {
+      const service = parseService(request, reply);
+      if (!service) return;
+      try {
+        const result = await agent.call<ServiceCredentialsResult>({
+          action: 'service.credentials',
+          service,
+        });
+        audit.record({
+          actor: 'admin',
+          event: 'service.credentials',
+          target: service,
+          outcome: 'ok',
+        });
+        await monitor.refresh(service);
+        return result;
+      } catch (error) {
+        audit.record({
+          actor: 'admin',
+          event: 'service.credentials',
+          target: service,
+          outcome: 'failed',
+          detail: error instanceof AgentRequestError ? error.code : 'error',
+        });
+        const refused = error instanceof AgentRequestError && error.code === 'refused';
+        return sendError(
+          reply,
+          refused ? 409 : 502,
+          refused ? 'already_shown' : 'agent',
+          describeAgentError(error),
+        );
+      }
+    });
 
     secured.post('/api/services/:name/uninstall', async (request, reply) => {
       const service = parseService(request, reply);

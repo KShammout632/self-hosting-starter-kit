@@ -1,0 +1,56 @@
+name: selfhost-nextcloud
+x-nextcloud: &nextcloud
+  image: {{IMAGE_APP}}
+  restart: unless-stopped
+  env_file:
+    - {{CONFIG_DIR}}/.env
+  environment:
+    TZ: "{{TZ}}"
+    POSTGRES_HOST: database
+    POSTGRES_DB: nextcloud
+    POSTGRES_USER: nextcloud
+    REDIS_HOST: redis
+    NEXTCLOUD_ADMIN_USER: admin
+    NEXTCLOUD_TRUSTED_DOMAINS: "{{TRUSTED_DOMAINS}}"
+    TRUSTED_PROXIES: "172.16.0.0/12 127.0.0.1"
+  volumes:
+    - {{CONFIG_DIR}}/html:/var/www/html
+    - {{NEXTCLOUD_DIR}}:/var/www/html/data
+  depends_on:
+    - database
+    - redis
+
+services:
+  app:
+    <<: *nextcloud
+    container_name: selfhost-nextcloud
+    mem_limit: 2g
+    ports:
+      - "{{LAN_PORT}}:80"
+
+  cron:
+    <<: *nextcloud
+    container_name: selfhost-nextcloud-cron
+    entrypoint: /cron.sh
+    mem_limit: 1g
+    depends_on:
+      - app
+
+  database:
+    image: {{IMAGE_DATABASE}}
+    container_name: selfhost-nextcloud-database
+    restart: unless-stopped
+    env_file:
+      - {{CONFIG_DIR}}/.env
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+    volumes:
+      - {{CONFIG_DIR}}/db:/var/lib/postgresql/data
+
+  redis:
+    image: {{IMAGE_REDIS}}
+    container_name: selfhost-nextcloud-redis
+    restart: unless-stopped
+    volumes:
+      - {{CONFIG_DIR}}/redis:/data

@@ -3,7 +3,8 @@ import type { ServiceManifest } from './manifest';
 export type TemplateVars = Record<string, string | number | boolean>;
 
 const NAME = '[A-Z][A-Z0-9_]*';
-const SAFE_VALUE = /^[A-Za-z0-9_.:/@+-]*$/;
+// A space is allowed so a value can hold a list. Templates must quote any value that may contain one.
+const SAFE_VALUE = /^[A-Za-z0-9_.:/@+ -]*$/;
 const IF_BLOCK = new RegExp(
   `^[ \\t]*\\{\\{#if (${NAME})\\}\\}[ \\t]*\\n([\\s\\S]*?)^[ \\t]*\\{\\{/if\\}\\}[ \\t]*\\n`,
   'gm',
