@@ -1,9 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import {
   chmod,
   chown,
   mkdir,
   readFile,
   readdir,
+  realpath,
   rename,
   rm,
   stat,
@@ -43,6 +45,8 @@ export interface HostFs {
   removeFile(path: string): Promise<void>;
   listDir(path: string): Promise<string[]>;
   setOwner(path: string, owner: Owner, mode: number): Promise<void>;
+  // The path with every symlink resolved, or null when it does not exist.
+  realPath(path: string): Promise<string | null>;
 }
 
 export const realFs: HostFs = {
@@ -51,10 +55,18 @@ export const realFs: HostFs = {
     if (owner) await chown(path, owner.uid, owner.gid);
   },
   async writeFile(path, content, mode) {
-    // Write then rename, so a crash never leaves a half-written compose file behind.
-    const temp = `${path}.tmp`;
-    await writeFile(temp, content, { mode });
-    await rename(temp, path);
+    // Write then rename, so a crash never leaves a half-written file behind. Some folders belong to
+    // other users (the dashboard owns /var/lib/selfhost), who could plant a symlink at a fixed
+    // temporary name and make root write through it. A random name created with O_EXCL never
+    // follows a link, and the rename replaces a link at the final name instead of following it.
+    const temp = `${path}.${randomBytes(8).toString('hex')}.tmp`;
+    try {
+      await writeFile(temp, content, { mode, flag: 'wx' });
+      await rename(temp, path);
+    } catch (error) {
+      await rm(temp, { force: true });
+      throw error;
+    }
   },
   async removeDir(path) {
     await rm(path, { recursive: true, force: true });
@@ -83,6 +95,9 @@ export const realFs: HostFs = {
   async setOwner(path, owner, mode) {
     await chown(path, owner.uid, owner.gid);
     await chmod(path, mode);
+  },
+  async realPath(path) {
+    return realpath(path).catch(() => null);
   },
 };
 
@@ -113,5 +128,8 @@ export const dryRunFs: HostFs = {
   },
   async setOwner(path) {
     console.error(JSON.stringify({ event: 'dry-run', would: ['chown', path] }));
+  },
+  async realPath(path) {
+    return path;
   },
 };

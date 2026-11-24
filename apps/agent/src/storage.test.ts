@@ -96,6 +96,8 @@ interface Options {
   files?: Record<string, string>;
   jellyfin?: string;
   smart?: string | Error;
+  // Symlinks on the host: a path and where it really points.
+  links?: Record<string, string>;
 }
 
 function makeHost(options: Options = {}) {
@@ -130,6 +132,12 @@ function makeHost(options: Options = {}) {
         .map((key) => key.slice(path.length + 1).split('/')[0]!);
     },
     async setOwner() {},
+    async realPath(path) {
+      for (const [link, real] of Object.entries(options.links ?? {})) {
+        if (path === link || path.startsWith(`${link}/`)) return real + path.slice(link.length);
+      }
+      return path;
+    },
   };
 
   const run: Deps['run'] = async (file, args) => {
@@ -281,7 +289,7 @@ describe('disk.mount', () => {
     expect(unit).toContain(`What=/dev/disk/by-uuid/${USB_UUID}`);
     expect(unit).toContain('Where=/mnt/media1');
     expect(unit).toContain('Type=ext4');
-    expect(unit).toContain('Options=nofail');
+    expect(unit).toMatch(/^Options=nofail,nosuid,nodev$/m);
     expect(unit).toContain('WantedBy=multi-user.target');
     expect(host.commands).toContainEqual(['systemctl', 'daemon-reload']);
     expect(host.commands).toContainEqual(['systemctl', 'enable', '--now', 'mnt-media1.mount']);
@@ -300,7 +308,7 @@ describe('disk.mount', () => {
     await ask(host.deps, mount(NTFS_UUID));
     const unit = host.files.get(unitFile('/mnt/media1'))!;
     expect(unit).toContain('Type=ntfs3');
-    expect(unit).toContain('Options=nofail,uid=1001,gid=1002,umask=002');
+    expect(unit).toContain('Options=nofail,nosuid,nodev,uid=1001,gid=1002,umask=002');
   });
 
   it('refuses the system disk and unsupported formats', async () => {
@@ -494,6 +502,13 @@ describe('disk.format', () => {
     expect(host.dirs).toContain('/mnt/media1/Home Videos');
   });
 
+  it('refuses a new partition whose name does not belong to the disk', async () => {
+    const host = makeHost({ disks: [systemDisk, usbDisk([null], { name: 'sdc1' })] });
+    const reply = await ask(host.deps, await withToken(host, 'sdb'));
+    expect(reply).toMatchObject({ ok: false, error: { code: 'failed' } });
+    expect(host.commands.some((c) => c[0] === 'mkfs.ext4')).toBe(false);
+  });
+
   it('cannot be replayed with the same token', async () => {
     const host = makeHost();
     const request = await withToken(host, 'sdb');
@@ -532,7 +547,7 @@ describe('folder.assign', () => {
     const unit = host.files.get(unitFile('/srv/media/movies'))!;
     expect(unit).toContain('What=/mnt/media1/Movies');
     expect(unit).toContain('Where=/srv/media/movies');
-    expect(unit).toContain('Options=bind');
+    expect(unit).toContain('Options=bind,nosuid,nodev');
     expect(unit).toContain('BindsTo=mnt-media1.mount');
     expect(host.dirs).toContain('/mnt/media1/Movies');
     expect(host.commands).toContainEqual([
@@ -580,6 +595,20 @@ describe('folder.assign', () => {
     const host = makeHost({ disks: mounted, files });
     expect(await ask(host.deps, assign())).toMatchObject({ ok: true });
     expect(host.commands).toContainEqual(['systemctl', 'stop', 'srv-media-movies.mount']);
+  });
+
+  it.each([
+    ['the folder itself', { '/mnt/media1/Movies': '/' }],
+    ['a folder above it', { '/mnt/media1/Nextcloud': '/etc' }],
+  ])('refuses when %s is a symlink, before touching anything', async (_name, links) => {
+    const files = { ...mountedFiles, '/srv/media/movies/film.mkv': 'x' };
+    const host = makeHost({ disks: mounted, files, links });
+    const subpath = '/mnt/media1/Nextcloud' in links ? 'Nextcloud/Movies' : 'Movies';
+    const reply = await ask(host.deps, assign({ subpath, copyExisting: true }));
+    expect(reply).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(host.dirs).toEqual([]);
+    expect(host.commands.some((c) => c[0] === 'rsync' || c[0] === 'systemctl')).toBe(false);
+    expect(host.files.has(unitFile('/srv/media/movies'))).toBe(false);
   });
 
   it('rejects subpaths that try to leave the drive', async () => {
@@ -664,6 +693,25 @@ describe('disk.smart', () => {
     })) as { data: { warnings: string[]; reallocatedSectors: number } };
     expect(reply.data.reallocatedSectors).toBe(12);
     expect(reply.data.warnings).toHaveLength(3);
+  });
+
+  it('drops values that are not numbers instead of passing them on', async () => {
+    const reply = await smart({
+      smart_status: { passed: 'yes' },
+      temperature: { current: '<b>hot</b>' },
+      power_on_time: { hours: { evil: true } },
+      ata_smart_attributes: { table: 'not a table' },
+    });
+    expect(reply).toMatchObject({
+      ok: true,
+      data: {
+        passed: null,
+        temperatureCelsius: null,
+        reallocatedSectors: null,
+        powerOnHours: null,
+        warnings: [],
+      },
+    });
   });
 
   it('reads the report even when smartctl exits non-zero', async () => {

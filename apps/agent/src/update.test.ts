@@ -58,6 +58,9 @@ function makeHost(
     async setOwner(path) {
       owned.push(path);
     },
+    async realPath(path) {
+      return path;
+    },
   };
 
   const deps: Deps = {

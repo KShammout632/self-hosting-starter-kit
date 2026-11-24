@@ -1,3 +1,4 @@
+import pkg from '../package.json' with { type: 'json' };
 import { parseConfig } from './config';
 import { createDispatcher } from './dispatch';
 import { createDockerClient, createFixtureDockerClient } from './docker';
@@ -13,6 +14,10 @@ declare const __TEST_BUILD__: boolean | undefined;
 async function main() {
   const testBuild = typeof __TEST_BUILD__ !== 'undefined' && __TEST_BUILD__;
   const config = parseConfig(process.argv.slice(2), process.env, testBuild);
+  if (config.buildInfo) {
+    console.log(JSON.stringify({ version: pkg.version, testBuild }));
+    return;
+  }
 
   const dispatch = createDispatcher({
     handlers,

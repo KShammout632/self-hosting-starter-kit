@@ -60,6 +60,9 @@ function makeHost(
     async setOwner(path, owner, mode) {
       owned.push({ path, owner, mode });
     },
+    async realPath(path) {
+      return path;
+    },
   };
 
   const run: Deps['run'] = async (file, args) => {

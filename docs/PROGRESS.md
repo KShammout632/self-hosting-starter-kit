@@ -16,8 +16,9 @@ Each session updates this file before opening its pull request. Newest entry fir
 | M5a Service updates, snapshots, rollback | Done, `update-gate` passed in CI | `m5a-service-updates` (PR 8) |
 | M5b Kit updates, Settings page, system updates | Done, `kit-update-gate` passed in CI | `m5b-kit-settings` (PR 9) |
 | M5c User guide and troubleshooting docs | Done, docs reviewed and merged by the owner. M5 is closed | `m5c-docs` (PR 10) |
-| M6a Hardening before the security review | Built: signed releases, pinned Node checksum, disk identity check before erasing, uninstall keeps files on drives. Release key made by the owner (public key committed, `RELEASE_SIGNING_KEY` secret set). All CI gates pass, including the changed `storage-gate` and `kit-update-gate` | `m6a-hardening` |
-| M6 Beta to 1.0 | In progress (M6a) | |
+| M6a Hardening before the security review | Built: signed releases, pinned Node checksum, disk identity check before erasing, uninstall keeps files on drives. Release key made by the owner (public key committed, `RELEASE_SIGNING_KEY` secret set). All CI gates pass, including the changed `storage-gate` and `kit-update-gate`. Merged | `m6a-hardening` (PR 11) |
+| M6b Security review and first pre-release | Built: security review of the agent (`docs/security-review.md`, 17 findings, 6 fixed), dashboard offers betas to beta servers, docs links point at the version tag, version 0.9.0 and its release notes. Waiting for CI gates on the pull request, then the owner tags `v0.9.0` | `m6b-security-review` |
+| M6 Beta to 1.0 | In progress (M6b) | |
 
 ## Next up
 
@@ -31,8 +32,8 @@ M4 is split into three sub-milestones, run in order, each on its own branch and 
   - M5b: built. Kit updates (`kit.update`), system updates and reboot, the Settings page (change password, audit log), a release workflow that publishes the tarball and checksum, and the kit upgrade test (`kit-update-gate`). Done, `kit-update-gate` passed in CI.
   - M5c: done, reviewed and merged by the owner, so M5 is closed. README, user guide, storage, remote access, updates and safety, troubleshooting and contributing docs, plus docs links in `install.sh` and the dashboard.
 - M6 is split into sub-milestones, run in order, each in its own session, branch and PR (the M6 exit gate is 1.0 released):
-  - M6a: built. Hardening before the security review: signed releases, pinned Node checksum, `diskId` check on `disk.format`, `uninstall.sh` stops at mounts.
-  - M6b: the security review of the agent, then tag a first pre-release (for example `v0.9.0-beta.1`) to prove the release workflow, and point the docs links at the installed version's tag.
+  - M6a: done, merged (PR 11). Signed releases, pinned Node checksum, `diskId` check on `disk.format`, `uninstall.sh` stops at mounts.
+  - M6b: built. Security review of the agent with fixes, version 0.9.0 published as a GitHub pre-release (versions before 1.0.0 always are), docs links at the version tag. After merging, the owner pushes `v0.9.0`, checks it with `scripts/check-release.sh` and installs it on a fresh VM.
   - M6c: hardware testing on an Intel N100 mini PC (by hand), capturing the screenshots on the way.
   - M6d: public beta, fixes from feedback, tag 1.0.
 
@@ -41,10 +42,15 @@ M4 is split into three sub-milestones, run in order, each on its own branch and 
 Ideas and follow-ups found during work that are outside the current milestone.
 
 - Docs: the screenshots are placeholders (a "Screenshot to add" note in `docs/user-guide.md`, `docs/storage.md`, `docs/remote-access.md` and `docs/updates-and-safety.md`). Capture them from a real server, and the Tailscale admin console one needs a real account.
-- Docs: the links in `install.sh` and the dashboard point at the `main` branch on GitHub, so they only work once the docs are merged. They show the docs as they are on `main`, not as they were at the installed version.
+- Docs: the links in `install.sh` and the dashboard point at the installed version's tag (M6b), so they do not work for a version whose tag has not been pushed yet, for example a local build.
 - Docs: the Nextcloud admin password reset and the "untrusted domain" fix use `docker exec ... php occ` from the terminal, because there is no dashboard action for them. A "Reset the Nextcloud password" action would remove the need.
 - Docs: the user guide tells people to add themselves to the `selfhost` group to copy files in over SFTP. A Samba share (mentioned in a comment in `install.sh`) would be easier but is not in v1.
-- Release steps: bump `version` in `apps/agent/package.json` and `KIT_VERSION` in `install.sh` together (a unit test fails if they differ), merge, then push a `v<version>` tag. `.github/workflows/release.yml` runs the checks, builds, signs, checks the signature and publishes the tarball, checksum and signature. The workflow has never run on a real tag.
+- Release steps are in `docs/contributing.md` (Releasing). The workflow has never run on a real tag; `v0.9.0` will be the first.
+- The README installs with `install.sh` from `main`. Between merging a version bump and pushing its tag, new installs fail because the release does not exist yet. Pointing the README at the latest release's `install.sh` would close that gap.
+- Security review (M6b), SR-4: the agent socket's group is also the group that may write to `/srv`, so adding an account for file copying also lets it manage the server. A separate group for the socket, given only to the dashboard container (`group_add`), would split them. It touches `install.sh`, the dashboard compose file and `apply-update.sh` (existing servers need the group made during the update), so it needs its own change and a run of `kit-update-gate`.
+- Security review (M6b), SR-10: the app containers run with their images' default privileges. Adding `no-new-privileges` and dropping capabilities per image needs testing on real hardware (Nextcloud and Postgres start as root and switch user).
+- Security review (M6b), SR-2: `folder.assign` checks for symlinks just before it mounts. An app that swaps a folder for a link in that moment is not caught. Mounting the drive with `nosymfollow` would close it but may break symlinks that people keep in their libraries.
+- Security review (M6b): the symlink tests (`host.test.ts`, `cli.test.ts`, `test/root-writes.sh`) need Linux and skip on Windows.
 - Release signing has one key and no expiry. Replacing it means shipping the new public key in a release signed with the old one (see `docs/contributing.md`). If the key leaks, existing servers cannot be moved to a new key safely through `kit.update`; they need the new installer run by hand.
 - `NODE_SHA256` in `install.sh` must change whenever `NODE_VERSION` does. It was copied from nodejs.org's `SHASUMS256.txt` for 22.23.3; checking that file's GPG signature against the Node release keys would make the pin stronger. Kit updates keep the bundled Node as it is (see below), so this only affects new installs.
 - Kit updates keep the bundled Node runtime as it is. A release that needs a newer Node would need `kit.update` (or `apply-update.sh`) to install it first.
@@ -97,6 +103,36 @@ Template for each entry:
 - Known issues:
 - Next:
 -->
+
+### 2026-11-24: M6b Security review and first pre-release
+- Built: (1) Security review of the agent, `install.sh`, `uninstall.sh` and `deploy/`, written up in `docs/security-review.md`. Fixed:
+  - SR-1, root writing through symlinks in `/var/lib/selfhost`, which the dashboard owns. The agent's file writes use a random temporary name with `O_EXCL`, `selfhost reset-password` does the same with `fchown`, and `install.sh` and `apply-update.sh` build the file in a root-only `mktemp -d` folder and `mv` it into place.
+  - SR-2, `folder.assign` following symlinks on a drive. Every existing part of the folder must resolve to itself, checked before and after it is created.
+  - SR-3, drive and folder mounts now use `nosuid,nodev`.
+  - SR-6, `package-release.sh` refuses a test build, using a new `--build-info` flag on the agent. Only `kit-update-gate` opts in, with `SELFHOST_PACKAGE_TEST_BUILD=1`.
+  - SR-7, the new partition name must belong to the disk before `mkfs.ext4` runs.
+  - SR-8, SMART values must be numbers.
+
+  Accepted with reasons: SR-4 (the socket group is also the file-copy group; the user guide now warns about it), SR-5 (confirm tokens can be asked for by anyone on the socket), SR-9 and SR-10. Each fix has a test: `host.test.ts`, `cli.test.ts`, new cases in `storage.test.ts` and `agent.test.ts`, `test/root-writes.sh` (new, CI `check` job), a test-build case in `test/release-signing.sh`, and a `nosuid` check in `storage-gate`.
+
+  (2) Pre-release:
+  - Versions stay plain `X.Y.Z`. `release.yml` publishes anything before 1.0.0 with `--prerelease`, and uses `docs/releases/v<version>.md` as the notes when it exists.
+  - The dashboard's kit check now reads GitHub's release list instead of "latest", and offers pre-releases only to a server on a version before 1.0.0 (`newestRelease` in `apps/api/src/settings-routes.ts`).
+  - `HELP_URL` in `install.sh` and `apps/web/src/lib/docs.ts` point at `blob/v<version>`. The dashboard takes the version from `apps/agent/package.json`, and a unit test keeps the two in line.
+  - Version 0.9.0 in `apps/agent/package.json` and `install.sh`, release notes in `docs/releases/v0.9.0.md`, and release steps in `docs/contributing.md`.
+
+  Lint, format check, type check, 319 unit tests (5 symlink tests skip on Windows) and 56 Playwright tests pass. `test/release-signing.sh` passes locally.
+- Decisions made (and why):
+  - Plain `v0.9.0` as a GitHub pre-release instead of `-beta.N` tags (owner's choice). The version rules in the schema, the scripts and `compareVersions` stay as they are, and beta fixes are 0.9.1, 0.9.2.
+  - The kit update status file stays in `/var/lib/selfhost` instead of moving to a root-only folder. Once root writes it safely, the dashboard can only change what it shows itself.
+  - The socket group split (SR-4) is left for later because it changes the installer, the compose file and the update path.
+- Not tested / needs the owner to check:
+  - The symlink tests and `test/root-writes.sh` need Linux, so they ran only in CI. Docker was not running on this machine.
+  - `storage-gate` (the `nosuid` check) and `kit-update-gate` (the `package-release.sh` opt-in) changed and need CI on the pull request.
+  - No release has been published yet. After merging: push `v0.9.0`, watch the Release workflow, download the three files and run `bash scripts/check-release.sh <folder> 0.9.0`, then install on a fresh Ubuntu 24.04 VM with the README command and go through the setup guide. Also check that the release shows as a pre-release and that the footer links in the dashboard open the `v0.9.0` docs.
+  - The dashboard's pre-release check against the real GitHub API is covered only by unit tests.
+- Known issues: see the new security review items and the README install gap under Later.
+- Next: the owner tags `v0.9.0` and runs the VM install, then M6c hardware testing.
 
 ### 2026-11-24: M6a Hardening before the security review
 - Built: (1) Signed releases. `scripts/package-release.sh` signs the `.sha256` file with an Ed25519 key (`.sha256.sig`, base64). `install.sh` checks it with `openssl` (`verify_release`) and the agent with Node's `crypto` (`apps/agent/src/release-key.ts`) before trusting the checksum. Both refuse a missing, wrong or foreign signature and a checksum for another file name, and refuse everything while the built-in public key is empty. `release.yml` signs with the `RELEASE_SIGNING_KEY` secret and then runs `scripts/check-release.sh`, which uses `install.sh`'s own `verify_release` and key. `scripts/new-release-key.sh` makes a key and writes the public half into both places. `test/release-signing.sh` (CI `check` job) covers the installer side; `kit-update-gate` now signs with a throwaway key and checks that releases signed by another key, or not signed, are refused. (2) `install.sh` pins Node by `NODE_SHA256` instead of trusting `SHASUMS256.txt` from the same server. (3) `disk.list` returns a `diskId` (hash of serial, WWN, model, size) and the serial; the dashboard sends the `diskId` the user saw with `disk.format`, and the agent re-reads lsblk and refuses with "nothing was erased" if it changed. The erase dialog shows the serial number. `storage-gate` checks a wrong id is refused and the disk left as it was. (4) `uninstall.sh` deletes media with `rm --one-file-system` and lists the folders on drives that it kept; deleting settings also disables and removes the kit's mount units. `storage-gate` now runs uninstall with media deletion (drive files kept, system disk files gone) and then with settings deletion too (units gone, files still on the drive). Lint, format check, type check, 306 unit tests and 56 Playwright tests pass, and `test/release-signing.sh` passes locally (Git Bash, OpenSSL 3.5).

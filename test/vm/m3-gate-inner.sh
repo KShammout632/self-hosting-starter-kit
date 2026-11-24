@@ -190,7 +190,8 @@ mountpoint -q "/mnt/$LABEL" || {
 }
 [ "$(stat -c %U "/mnt/$LABEL")" = selfhost ] || fail "/mnt/$LABEL is not owned by selfhost"
 for folder in Movies TV Music Photos; do [ -d "/mnt/$LABEL/$folder" ] || fail "missing /mnt/$LABEL/$folder"; done
-grep -q '^Options=nofail' "/etc/systemd/system/$(unit_name "/mnt/$LABEL")" || fail "the mount unit lacks nofail"
+grep -q '^Options=nofail,nosuid,nodev' "/etc/systemd/system/$(unit_name "/mnt/$LABEL")" || fail "the mount unit lacks nofail, nosuid or nodev"
+findmnt -n -o OPTIONS "/mnt/$LABEL" | grep -q 'nosuid' || fail "/mnt/$LABEL is not mounted nosuid"
 systemctl is-enabled "$(unit_name "/mnt/$LABEL")" >/dev/null || fail "the mount is not enabled for boot"
 
 step "The same token cannot erase anything twice"

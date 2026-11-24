@@ -306,10 +306,13 @@ export async function mountVolume(deps: Deps, uuid: string, label: string) {
   }
 
   const owner = await serviceOwner(deps);
+  // A drive holds files from other computers and from apps that run as root in their containers
+  // (Nextcloud), so setuid programs and device files on it must not work on the server.
+  const base = ['nofail', 'nosuid', 'nodev'];
   // NTFS and exFAT cannot store Linux owners, so the mount itself says who owns every file.
   const options = volume.keepsPermissions
-    ? ['nofail']
-    : ['nofail', `uid=${owner.uid}`, `gid=${owner.gid}`, 'umask=002'];
+    ? base
+    : [...base, `uid=${owner.uid}`, `gid=${owner.gid}`, 'umask=002'];
   const unit = unitNameForPath(where);
   const unitPath = `${deps.paths.unitDir}/${unit}`;
   const text = [
@@ -386,6 +389,8 @@ export async function unmountVolume(deps: Deps, uuid: string) {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+const partitionOf = (device: string) => new RegExp(`^${device}p?[0-9]{1,3}$`);
+
 async function waitForPartition(deps: Deps, device: string): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt++) {
     await deps.run('udevadm', ['settle'], { timeoutMs: 30_000 });
@@ -394,7 +399,16 @@ async function waitForPartition(deps: Deps, device: string): Promise<string> {
       blockdevices?: { children?: { name: string; type: string }[] }[];
     };
     const part = parsed.blockdevices?.[0]?.children?.find((c) => c.type === 'part');
-    if (part) return part.name;
+    // The name becomes the mkfs target, so it must be a partition of this disk and nothing else.
+    if (part) {
+      if (!partitionOf(device).test(part.name)) {
+        throw new AgentError(
+          'failed',
+          'The new partition has an unexpected name, so it was not formatted.',
+        );
+      }
+      return part.name;
+    }
     await sleep(500);
   }
   throw new AgentError(
@@ -453,6 +467,27 @@ export async function formatDisk(deps: Deps, device: string, diskId: string, lab
   return { uuid: volume.uuid, label };
 }
 
+const linkRefused = () =>
+  new AgentError(
+    'refused',
+    'That folder is a shortcut to somewhere else, so it cannot be used. Choose a normal folder on the drive.',
+  );
+
+// A drive can hold symlinks: from another computer, or made by an app that writes to it (Immich and
+// Nextcloud do). The agent runs as root, so following one would chown, copy into and bind-mount
+// whatever it points at, for example / into an app's container. Every part of the folder must be a
+// real folder on the drive, or not exist yet.
+async function refuseLinks(deps: Deps, volume: string, subpath: string): Promise<void> {
+  if ((await deps.fs.realPath(volume)) !== volume) throw linkRefused();
+  let current = volume;
+  for (const part of subpath.split('/')) {
+    current = `${current}/${part}`;
+    const real = await deps.fs.realPath(current);
+    if (real === null) return;
+    if (real !== current) throw linkRefused();
+  }
+}
+
 export async function assignFolder(
   deps: Deps,
   folder: LibraryFolder,
@@ -488,7 +523,9 @@ export async function assignFolder(
   }
 
   const owner = await serviceOwner(deps);
+  await refuseLinks(deps, volumePath(deps, volume.mountLabel), subpath);
   await deps.fs.ensureDir(target, volume.keepsPermissions ? owner : undefined);
+  if ((await deps.fs.realPath(target)) !== target) throw linkRefused();
   if (alreadyMapped) await systemctl(deps, 'stop', unit);
   if (hasLocalFiles) {
     await deps.run('rsync', ['-a', '--', `${path}/`, `${target}/`], {
@@ -509,7 +546,7 @@ export async function assignFolder(
     `What=${target}`,
     `Where=${path}`,
     'Type=none',
-    'Options=bind',
+    'Options=bind,nosuid,nodev',
     '',
     '[Install]',
     'WantedBy=multi-user.target',
@@ -626,11 +663,15 @@ export async function diskSmart(deps: Deps, uuid: string): Promise<SmartResult> 
     };
   }
 
+  // The report comes from the drive's firmware through smartctl, so only real numbers are passed on.
   const nvme = report.nvme_smart_health_information_log;
-  const reallocated =
-    report.ata_smart_attributes?.table?.find((attribute) => attribute.id === 5)?.raw?.value ?? null;
-  const temperature = report.temperature?.current ?? nvme?.temperature ?? null;
-  const passed = report.smart_status?.passed ?? null;
+  const table = report.ata_smart_attributes?.table;
+  const reallocated = toNumber(
+    (Array.isArray(table) ? table : []).find((attribute) => attribute?.id === 5)?.raw?.value,
+  );
+  const temperature = toNumber(report.temperature?.current) ?? toNumber(nvme?.temperature);
+  const passed =
+    typeof report.smart_status?.passed === 'boolean' ? report.smart_status.passed : null;
 
   const warnings: string[] = [];
   if (passed === false)
@@ -638,7 +679,7 @@ export async function diskSmart(deps: Deps, uuid: string): Promise<SmartResult> 
   if (reallocated !== null && reallocated > 0) {
     warnings.push('Some parts of this drive have worn out. Keep a copy of anything important.');
   }
-  if (nvme && (nvme.critical_warning ?? 0) > 0) {
+  if ((toNumber(nvme?.critical_warning) ?? 0) > 0) {
     warnings.push('The drive is reporting a warning about its own health.');
   }
   if (temperature !== null && temperature >= 60) warnings.push('The drive is running hot.');
@@ -648,7 +689,7 @@ export async function diskSmart(deps: Deps, uuid: string): Promise<SmartResult> 
     passed,
     temperatureCelsius: temperature,
     reallocatedSectors: reallocated,
-    powerOnHours: report.power_on_time?.hours ?? null,
+    powerOnHours: toNumber(report.power_on_time?.hours),
     warnings,
   };
 }

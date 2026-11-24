@@ -135,6 +135,8 @@ The folders belong to the `selfhost` group and are writable by it. To copy files
 sudo usermod -aG selfhost $USER
 ```
 
+Only do this for the account you already use with `sudo`. Members of the `selfhost` group can also give orders to the server's helper program (install and remove apps, erase drives), so never add an account for someone who should not manage the server.
+
 | Folder | Used by |
 | --- | --- |
 | `/srv/media/movies` | Jellyfin |

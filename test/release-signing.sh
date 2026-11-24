@@ -78,4 +78,17 @@ echo 'not base64 !!!' >"$dir/$NAME.sha256.sig"
 check "$dir" "$KEY" && fail "a garbage signature was accepted"
 echo "ok: a garbage signature is refused"
 
+cp apps/agent/dist/agent.cjs "$work/agent.cjs.release"
+restore_agent() { cp "$work/agent.cjs.release" apps/agent/dist/agent.cjs; }
+SELFHOST_TEST_BUILD=1 pnpm --filter @selfhost/agent build >/dev/null 2>&1 || {
+  restore_agent
+  fail "could not make a test build"
+}
+if SELFHOST_SIGNING_KEY_FILE="$work/key.pem" bash scripts/package-release.sh "$VERSION" "$work/test-build" >/dev/null 2>&1; then
+  restore_agent
+  fail "a test build of the agent was packaged as a release"
+fi
+restore_agent
+echo "ok: a test build of the agent cannot be packaged as a release"
+
 echo "SIGNING TEST PASSED"
