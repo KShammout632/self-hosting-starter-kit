@@ -94,7 +94,7 @@ call '{"action":"service.install","service":"navidrome"}' | jq -e '.ok == true' 
 wait_for 60 "Navidrome" curl -fsS "$NAVIDROME/ping"
 echo kept >/opt/selfhost/config/navidrome/gate-marker
 echo kept >/var/lib/selfhost/gate-marker
-STARTED_BEFORE="$(docker inspect --format '{{.State.StartedAt}}' selfhost-navidrome-1)"
+STARTED_BEFORE="$(docker inspect --format '{{.State.StartedAt}}' selfhost-navidrome)"
 
 step "Refuses the same version, an older one, and an address in the request"
 call "{\"action\":\"kit.update\",\"version\":\"$OLD\"}" | jq -e '.ok == false and .error.code == "refused"' >/dev/null
@@ -120,7 +120,7 @@ dashboard_up | jq -e '.ok == true' >/dev/null
 
 step "Services, settings and data were not touched"
 curl -fsS "$NAVIDROME/ping" >/dev/null
-[ "$(docker inspect --format '{{.State.StartedAt}}' selfhost-navidrome-1)" = "$STARTED_BEFORE" ] ||
+[ "$(docker inspect --format '{{.State.StartedAt}}' selfhost-navidrome)" = "$STARTED_BEFORE" ] ||
   fail "Navidrome was restarted by the kit update"
 [ "$(cat /opt/selfhost/config/navidrome/gate-marker)" = kept ] || fail "service data changed"
 [ "$(cat /var/lib/selfhost/gate-marker)" = kept ] || fail "dashboard data changed"
