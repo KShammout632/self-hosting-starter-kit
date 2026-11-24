@@ -44,6 +44,10 @@ export const deviceName = z
   .string()
   .regex(/^(sd[a-z]{1,2}|vd[a-z]{1,2}|nvme\d{1,2}n\d{1,2}|mmcblk\d{1,2})$/);
 
+// A short fingerprint of one physical disk (serial, WWN, model and size), from disk.list. Kernel names
+// like sdb can move to another disk when drives are replugged; this cannot, so disk.format checks it.
+export const diskId = z.string().regex(/^[a-f0-9]{16}$/);
+
 // Becomes /mnt/<label> and a systemd unit name, so keep it to a safe subset.
 export const volumeLabel = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/);
 

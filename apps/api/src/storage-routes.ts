@@ -4,6 +4,7 @@ import { catalog } from '@selfhost/catalog';
 import {
   LIBRARY_FOLDERS,
   deviceName,
+  diskId,
   filesystemUuid,
   folderSubpath,
   libraryFolder,
@@ -41,6 +42,7 @@ export interface StorageRouteDeps {
 const mountBody = z.object({ label: volumeLabel });
 const unmountBody = z.object({ stopServices: z.boolean().default(false) });
 const formatBody = z.object({
+  diskId,
   label: volumeLabel,
   confirmName: z.string().max(32),
 });
@@ -230,7 +232,7 @@ export function registerStorageRoutes(secured: FastifyInstance, deps: StorageRou
     }
 
     job = { kind: 'formatting', target: device.data, state: 'running', message: null };
-    const { label } = body.data;
+    const { label, diskId: chosen } = body.data;
     void (async () => {
       try {
         const confirm = (
@@ -241,7 +243,7 @@ export function registerStorageRoutes(secured: FastifyInstance, deps: StorageRou
           })
         ).token;
         await agent.call(
-          { action: 'disk.format', device: device.data, label, confirm },
+          { action: 'disk.format', device: device.data, diskId: chosen, label, confirm },
           { timeoutMs: LONG_TIMEOUT_MS },
         );
         audit.record({ actor: 'admin', event: 'disk.format', target: device.data, outcome: 'ok' });

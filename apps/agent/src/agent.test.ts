@@ -59,11 +59,13 @@ describe('config', () => {
       dryRun: false,
       socketPath: '/run/selfhost/agent.sock',
       releaseBase: null,
+      releaseKey: null,
     });
     expect(parseConfig(['--dry-run', '--socket', '/tmp/a.sock'], {})).toEqual({
       dryRun: true,
       socketPath: '/tmp/a.sock',
       releaseBase: null,
+      releaseKey: null,
     });
     expect(parseConfig([], { SELFHOST_DRY_RUN: '1' }).dryRun).toBe(true);
   });
@@ -91,6 +93,26 @@ describe('config', () => {
     ])('refuses %s even in a test build', (value) => {
       expect(parseConfig([], { SELFHOST_RELEASE_BASE: value }, true).releaseBase).toBeNull();
     });
+  });
+
+  describe('test release key', () => {
+    const key = 'MCowBQYDK2VwAyEAtLw+7gSgn1Y5a0R4hi7e+XC62DZuVHeO8+iGu6fAX48=';
+
+    it('is ignored on a normal agent', () => {
+      expect(parseConfig([], { SELFHOST_RELEASE_KEY: key }).releaseKey).toBeNull();
+    });
+
+    it('is used in a dry run or a test build', () => {
+      expect(parseConfig(['--dry-run'], { SELFHOST_RELEASE_KEY: key }).releaseKey).toBe(key);
+      expect(parseConfig([], { SELFHOST_RELEASE_KEY: key }, true).releaseKey).toBe(key);
+    });
+
+    it.each(['', 'abc', `${key}\n`, key.replace('MCow', 'MCox')])(
+      'refuses %j even in a test build',
+      (value) => {
+        expect(parseConfig([], { SELFHOST_RELEASE_KEY: value }, true).releaseKey).toBeNull();
+      },
+    );
   });
 
   it('rejects unknown flags', () => {
@@ -189,7 +211,15 @@ describe('dispatcher', () => {
 
   it('requires a confirm token for destructive actions', async () => {
     const [reply] = await collect(
-      dispatcher()(line({ id: 'a', action: 'disk.format', device: 'sdb', label: 'media1' })),
+      dispatcher()(
+        line({
+          id: 'a',
+          action: 'disk.format',
+          device: 'sdb',
+          diskId: '0123456789abcdef',
+          label: 'media1',
+        }),
+      ),
     );
     expect(reply).toMatchObject({ ok: false, error: { code: 'confirm_required' } });
   });

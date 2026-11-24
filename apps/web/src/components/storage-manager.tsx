@@ -207,6 +207,7 @@ function FormatDialog({ disk, onClose }: { disk: DiskInfo; onClose: () => void }
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     await actions.run(`/api/disks/by-device/${disk.device}/format`, {
+      diskId: disk.diskId,
       label: name,
       confirmName: typed,
     });
@@ -217,7 +218,7 @@ function FormatDialog({ disk, onClose }: { disk: DiskInfo; onClose: () => void }
       open
       onClose={onClose}
       title="Erase and prepare this drive"
-      description={`Everything on ${disk.model ?? 'this drive'} (${formatBytes(disk.sizeBytes)}) will be erased and cannot be recovered.`}
+      description={`Everything on ${disk.model ?? 'this drive'} (${formatBytes(disk.sizeBytes)}${disk.serial ? `, serial number ${disk.serial}` : ''}) will be erased and cannot be recovered.`}
     >
       <>
         <form onSubmit={submit} className="space-y-3">
@@ -355,6 +356,12 @@ function DiskCard({
             <dt className="text-muted-foreground">Drive code</dt>
             <dd>{disk.device}</dd>
           </div>
+          {disk.serial ? (
+            <div>
+              <dt className="text-muted-foreground">Serial number</dt>
+              <dd className="break-all">{disk.serial}</dd>
+            </div>
+          ) : null}
           {disk.volumes.map((volume) => (
             <div key={volume.uuid}>
               <dt className="text-muted-foreground">{volume.partition}</dt>

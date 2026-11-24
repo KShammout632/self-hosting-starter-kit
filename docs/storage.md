@@ -32,7 +32,9 @@ If the library folder on the server already has files in it, you will see a box 
 2. Choose a name, press **Erase and prepare**, and type the drive code shown to confirm (for example `sdb`). If you were signed in more than 15 minutes ago, you are asked for your password again.
 3. The kit erases the drive, formats it as ext4 (the best choice for Linux), mounts it and makes the standard folders.
 
-**This destroys everything on the drive.** Check the model and size shown on the card before you confirm. Double-check you picked the right one.
+**This destroys everything on the drive.** Check the model, size and serial number shown before you confirm (the serial number is printed on most drives, and is under **Show details** on the card). Double-check you picked the right one.
+
+If drives were unplugged or swapped while the window was open, the kit notices that the drive is no longer the one you chose and erases nothing. Close the window and pick the drive again.
 
 Preparing takes a few minutes. Keep the drive plugged in until it finishes.
 

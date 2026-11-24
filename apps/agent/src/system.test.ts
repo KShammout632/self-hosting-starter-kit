@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { AgentResponse } from '@selfhost/shared';
 import { createConfirmTokens } from './confirm';
@@ -12,8 +13,20 @@ const TARBALL = `selfhost-kit-${NEXT}-linux-x64.tar.gz`;
 const STAGE = `/opt/selfhost/releases/${NEXT}`;
 const HASH = 'a'.repeat(64);
 
+function makeKey() {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  return {
+    publicKey: publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+    sign: (data: string) => sign(null, Buffer.from(data), privateKey).toString('base64') + '\n',
+  };
+}
+const KEY = makeKey();
+const OTHER_KEY = makeKey();
+
 interface Options {
   checksum?: string;
+  signature?: 'good' | 'missing' | 'garbage' | 'other key' | 'for another file';
+  releaseKey?: string;
   insideVersion?: string;
   failCommand?: string;
   rebootRequired?: boolean;
@@ -64,8 +77,14 @@ function makeHost(options: Options = {}) {
       if (options.failCommand === file) throw new Error('failed');
       if (file === 'curl') {
         const destination = args[args.indexOf('--output') + 1]!;
-        if (destination.endsWith('.sha256')) {
-          files.set(destination, options.checksum ?? `${HASH}  ${TARBALL}\n`);
+        const checksum = options.checksum ?? `${HASH}  ${TARBALL}\n`;
+        if (destination.endsWith('.sha256')) files.set(destination, checksum);
+        if (destination.endsWith('.sig')) {
+          const kind = options.signature ?? 'good';
+          if (kind === 'good') files.set(destination, KEY.sign(checksum));
+          if (kind === 'garbage') files.set(destination, 'not a signature\n');
+          if (kind === 'other key') files.set(destination, OTHER_KEY.sign(checksum));
+          if (kind === 'for another file') files.set(destination, KEY.sign(`${HASH}  x\n`));
         }
       }
       if (file === 'sha256sum') return `${HASH}  ${args[0]}\n`;
@@ -83,6 +102,7 @@ function makeHost(options: Options = {}) {
     stream: dryRunStreamer,
     httpCheck: async () => true,
     confirmTokens: createConfirmTokens(),
+    releaseKey: options.releaseKey ?? KEY.publicKey,
     ...(options.releaseBase ? { releaseBase: options.releaseBase } : {}),
   };
   return { deps, commands, files, dispatch: createDispatcher({ handlers, deps, log: () => {} }) };
@@ -193,6 +213,7 @@ describe('kit.update', () => {
     expect(curls.map((c) => c.args.at(-1))).toEqual([
       `https://github.com/KShammout632/self-hosting-starting-kit/releases/download/v${NEXT}/${TARBALL}`,
       `https://github.com/KShammout632/self-hosting-starting-kit/releases/download/v${NEXT}/${TARBALL}.sha256`,
+      `https://github.com/KShammout632/self-hosting-starting-kit/releases/download/v${NEXT}/${TARBALL}.sha256.sig`,
     ]);
     expect(curls[0]!.args).toEqual(expect.arrayContaining(['--proto', '=https']));
 
@@ -241,6 +262,24 @@ describe('kit.update', () => {
     const reply = await ask(host, { action: 'kit.update', version: NEXT });
     expect(reply).toMatchObject({ ok: false, error: { code: 'failed' } });
     expect(host.commands.some((c) => c.file === 'systemd-run')).toBe(false);
+  });
+
+  it.each(['missing', 'garbage', 'other key', 'for another file'] as const)(
+    'does not install a release whose signature is %s',
+    async (signature) => {
+      const host = makeHost({ signature });
+      const reply = await ask(host, { action: 'kit.update', version: NEXT });
+      expect(reply).toMatchObject({ ok: false, error: { code: 'failed' } });
+      expect(host.commands.some((c) => c.file === 'tar' || c.file === 'systemd-run')).toBe(false);
+      expect(host.files.has(`${STAGE}/${TARBALL}.sha256`)).toBe(false);
+    },
+  );
+
+  it('refuses to update at all when the build has no signing key', async () => {
+    const host = makeHost({ releaseKey: '' });
+    const reply = await ask(host, { action: 'kit.update', version: NEXT });
+    expect(reply).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(host.commands).toEqual([]);
   });
 
   it('does not install a release that contains a different version', async () => {

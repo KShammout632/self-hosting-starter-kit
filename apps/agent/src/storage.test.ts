@@ -29,6 +29,8 @@ interface Node {
   label?: string | null;
   mountpoints?: (string | null)[];
   model?: string;
+  serial?: string | null;
+  wwn?: string | null;
   tran?: string;
   rm?: boolean;
   fsavail?: number | null;
@@ -63,6 +65,7 @@ const usbDisk = (mountpoints: (string | null)[] = [null], extra: Partial<Node> =
   type: 'disk',
   size: 2e12,
   model: 'USB Drive',
+  serial: 'USB0001',
   tran: 'usb',
   rm: false,
   children: [
@@ -391,20 +394,53 @@ describe('disk.unmount', () => {
 });
 
 describe('disk.format', () => {
-  const format = (device = 'sdb', label = 'media1') => ({
+  const UNKNOWN_ID = 'ffffffffffffffff';
+  const format = (device = 'sdb', label = 'media1', diskId = UNKNOWN_ID) => ({
     action: 'disk.format',
     device,
+    diskId,
     label,
   });
+  const diskIdOf = async (host: ReturnType<typeof makeHost>, device: string) => {
+    const listed = await ask(host.deps, { action: 'disk.list' });
+    const disks = (listed as { data: { disks: { device: string; diskId: string }[] } }).data.disks;
+    return disks.find((disk) => disk.device === device)?.diskId ?? UNKNOWN_ID;
+  };
   const withToken = async (host: ReturnType<typeof makeHost>, device: string, label?: string) => {
+    const diskId = await diskIdOf(host, device);
     const issued = await ask(host.deps, {
       action: 'confirm.issue',
       kind: 'disk.format',
       target: device,
     });
     const confirm = (issued as { data: { token: string } }).data.token;
-    return { ...format(device, label), confirm };
+    return { ...format(device, label, diskId), confirm };
   };
+
+  it('gives each physical disk its own id, which a swap at the same name changes', async () => {
+    const host = makeHost();
+    const before = await diskIdOf(host, 'sdb');
+    expect(before).toMatch(/^[a-f0-9]{16}$/);
+    expect(await diskIdOf(host, 'sda')).not.toBe(before);
+    host.setDisks([systemDisk, { ...usbDisk(), serial: 'USB0002' }]);
+    expect(await diskIdOf(host, 'sdb')).not.toBe(before);
+    host.setDisks([systemDisk, usbDisk()]);
+    expect(await diskIdOf(host, 'sdb')).toBe(before);
+  });
+
+  it.each([
+    ['another drive with a different serial', { serial: 'USB0002' }],
+    ['a drive with no serial of a different size', { serial: null, size: 1e12 }],
+    ['a drive with no serial of another model', { serial: null, model: 'Other Drive' }],
+  ])('refuses when sdb is now %s, before touching it', async (_name, change) => {
+    const host = makeHost();
+    const request = await withToken(host, 'sdb');
+    host.setDisks([systemDisk, { ...usbDisk(), ...change }]);
+    const reply = await ask(host.deps, request);
+    expect(reply).toMatchObject({ ok: false, error: { code: 'refused' } });
+    expect(JSON.stringify(reply)).toContain('nothing was erased');
+    expect(host.commands.some((c) => c[0] === 'wipefs' || c[0] === 'parted')).toBe(false);
+  });
 
   it('never formats the system disk, even with a valid confirmation', async () => {
     const host = makeHost();

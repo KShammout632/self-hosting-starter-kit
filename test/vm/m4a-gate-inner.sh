@@ -15,7 +15,7 @@ fail() {
   echo "GATE FAILED: $*" >&2
   exit 1
 }
-trap 'for s in navidrome immich nextcloud; do echo "----- $s"; selfhost logs "$s" --tail 40 || true; done; docker ps -a || true' ERR
+trap 'for s in navidrome immich nextcloud; do echo "----- $s"; selfhost logs "$s" --tail 40 || true; done; docker ps -a || true; echo "----- agent"; journalctl -u selfhost-agent --no-pager -n 40 || true' ERR
 
 call() {
   local node=/opt/selfhost/agent/node

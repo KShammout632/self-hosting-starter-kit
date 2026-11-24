@@ -93,7 +93,24 @@ Work is split into milestones, one branch each, named like `m5c-docs`. A milesto
 2. Merge to `main`.
 3. Push a tag named `v<version>`, for example `v0.2.0`.
 
-`.github/workflows/release.yml` then runs the checks, builds the release and publishes the tarball and its `.sha256` checksum on GitHub. The installer and the kit update both download those two files from the release for that version. Until a release for the installer's version exists, the installer cannot download anything.
+`.github/workflows/release.yml` then runs the checks, builds the release, signs it and publishes three files on GitHub: the tarball, its `.sha256` checksum and `.sha256.sig`, an Ed25519 signature of the checksum file. Before publishing, it checks the release with `scripts/check-release.sh`, which runs the installer's own check, so a signing key that does not match the public key fails the release instead of every install. The installer and the kit update both download the three files and refuse anything whose signature does not match the public key built into them. Until a release for the installer's version exists, the installer cannot download anything.
+
+### The signing key
+
+The public key is in two places that must match (a unit test checks): `RELEASE_PUBLIC_KEY` in `install.sh` and in `apps/agent/src/release-key.ts`. The private key is the `RELEASE_SIGNING_KEY` repository secret. While the public key is empty, the installer cannot download a release and the kit cannot update itself.
+
+To make a key (once, or to replace a lost or leaked one), run from the repo root on a Linux machine or in Git Bash:
+
+```bash
+bash scripts/new-release-key.sh ~/selfhost-release-key.pem
+gh secret set RELEASE_SIGNING_KEY < ~/selfhost-release-key.pem
+```
+
+The script refuses to write the private key inside the repository. Keep an offline copy of it somewhere safe (a password manager or an encrypted USB stick), then delete the file. Commit the changed public key in `install.sh` and `release-key.ts`.
+
+Replacing the key: servers only trust the key built into the version they run. Release the new public key in a version that is still signed with the old key, so existing servers can update to it, and sign every release after that with the new key. If the old key leaked, people have to run the new installer by hand instead, because an update signed with a leaked key proves nothing.
+
+`test/release-signing.sh` (run in CI) signs a release with a throwaway key and checks that the installer's check accepts it and refuses a changed tarball, a changed checksum, another key, a missing signature and a checksum for another file. The `kit-update-gate` job does the same for the agent, which takes a test key through `SELFHOST_RELEASE_KEY` only in a test build.
 
 ## Licence
 

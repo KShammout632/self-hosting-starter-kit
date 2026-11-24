@@ -377,7 +377,7 @@ Nothing is reachable from the public internet: outside access requires the user'
 **Supply chain**
 
 - All images pinned by version tag (and digest in the release manifest); updates move to the next tested pin
-- Installer downloads a signed or checksummed release, never `main`
+- Installer downloads a signed release (Ed25519 signature over the checksum file), never `main`
 - Renovate or Dependabot opens PRs for new image versions; CI runs the full install test before merge
 
 **Docs should state clearly:** do not port-forward service ports, keep the server on a trusted network, and enable automatic security updates (on by default).
@@ -388,7 +388,7 @@ Updates only move to versions the kit has tested, and every update takes a confi
 
 **Updates**
 
-- **Kit updates:** the dashboard checks GitHub Releases daily. "Update" downloads the new release, verifies its checksum, replaces the agent and dashboard, and restarts them. The previous release is kept for rollback.
+- **Kit updates:** the dashboard checks GitHub Releases daily. "Update" downloads the new release, verifies its signature and checksum, replaces the agent and dashboard, and restarts them. The previous release is kept for rollback.
 - **Service updates:** each kit release carries a version manifest (image tag per service). The service card shows "Update available" with release notes links. Updating runs: backup, pull, `docker compose up -d`, health check, and automatic rollback to the old tag if the health check fails within 5 minutes.
 - **System updates:** security patches install automatically via `unattended-upgrades`. The dashboard shows pending updates and a "Reboot required" banner.
 

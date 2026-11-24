@@ -28,8 +28,17 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - name: Package the release
-        run: bash scripts/package-release.sh "$VERSION" release
+      - name: Package and sign the release
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          [ -n "$RELEASE_SIGNING_KEY" ] || { echo "The RELEASE_SIGNING_KEY secret is not set."; exit 1; }
+          key="$RUNNER_TEMP/release-key.pem"
+          (umask 077 && printf '%s\n' "$RELEASE_SIGNING_KEY" >"$key")
+          SELFHOST_SIGNING_KEY_FILE="$key" bash scripts/package-release.sh "$VERSION" release
+          rm -f "$key"
+      - name: Check the release the way the installer will
+        run: bash scripts/check-release.sh release "$VERSION"
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

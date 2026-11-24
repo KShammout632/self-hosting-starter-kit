@@ -8,6 +8,7 @@ import {
 } from '@selfhost/shared';
 import pkg from '../package.json' with { type: 'json' };
 import { AgentError } from './errors';
+import { RELEASE_PUBLIC_KEY, signatureMatches } from './release-key';
 import type { Deps, Handlers } from './handlers';
 
 export const RELEASE_REPO = 'KShammout632/self-hosting-starting-kit';
@@ -163,6 +164,14 @@ export const systemHandlers: Handlers = {
       );
     }
 
+    const releaseKey = deps.releaseKey ?? RELEASE_PUBLIC_KEY;
+    if (!deps.dryRun && releaseKey === '') {
+      throw new AgentError(
+        'refused',
+        'This version of the kit cannot check downloads, so it cannot update itself.',
+      );
+    }
+
     const previous = await readUpdateStatus(deps);
     if (previous?.state === 'running' && Date.now() - Date.parse(previous.at) < STALE_UPDATE_MS) {
       throw new AgentError('busy', 'An update is already in progress.');
@@ -176,7 +185,7 @@ export const systemHandlers: Handlers = {
     await deps.fs.removeDir(stage);
     await deps.fs.ensureDir(bundle);
     try {
-      for (const file of [name, `${name}.sha256`]) {
+      for (const file of [name, `${name}.sha256`, `${name}.sha256.sig`]) {
         await deps.run(
           'curl',
           downloadArgs(deps, `${base}/v${version}/${file}`, `${stage}/${file}`),
@@ -191,11 +200,16 @@ export const systemHandlers: Handlers = {
     }
 
     if (!deps.dryRun) {
-      const expected = /^([0-9a-f]{64})\s+\*?(\S+)\s*$/m.exec(
-        (await deps.fs.readFile(`${stage}/${name}.sha256`)) ?? '',
-      );
-      const actual = (await deps.run('sha256sum', [`${stage}/${name}`])).split(/\s+/)[0];
-      if (!expected || expected[2] !== name || expected[1] !== actual) {
+      // The checksum file is trusted only once its signature checks out: the release that serves the
+      // tarball also serves the checksum, so on its own the checksum only catches a broken download.
+      const checksumFile = (await deps.fs.readFile(`${stage}/${name}.sha256`)) ?? '';
+      const signature = (await deps.fs.readFile(`${stage}/${name}.sha256.sig`)) ?? '';
+      const signed = signatureMatches(releaseKey, checksumFile, signature);
+      const expected = /^([0-9a-f]{64})\s+\*?(\S+)\s*$/m.exec(checksumFile);
+      const actual = signed
+        ? (await deps.run('sha256sum', [`${stage}/${name}`])).split(/\s+/)[0]
+        : undefined;
+      if (!signed || !expected || expected[2] !== name || expected[1] !== actual) {
         await deps.fs.removeDir(stage);
         throw new AgentError(
           'failed',

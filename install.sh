@@ -13,6 +13,11 @@ set -euo pipefail
 
 KIT_VERSION="0.1.0"
 NODE_VERSION="22.23.3"
+# Pinned here rather than read from nodejs.org, which also serves the download it would be checking.
+NODE_SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"
+# Ed25519 key that signs releases (base64 DER), from scripts/new-release-key.sh. The agent holds the
+# same value in apps/agent/src/release-key.ts.
+RELEASE_PUBLIC_KEY="MCowBQYDK2VwAyEAMaipbJAreKa3ZSIx9zLx3/N4aE7BNaN0k6Hcb5FmKJY="
 REPO="KShammout632/self-hosting-starting-kit"
 HELP_URL="https://github.com/${REPO}/blob/main/docs/troubleshooting.md"
 LOG_FILE="/var/log/selfhost-install.log"
@@ -66,7 +71,7 @@ preflight() {
 install_base_packages() {
   say "Installing basic tools and automatic security updates"
   apt-get update -qq
-  apt_install ca-certificates curl gnupg jq smartmontools parted rsync unattended-upgrades xz-utils ufw
+  apt_install ca-certificates curl gnupg jq openssl smartmontools parted rsync unattended-upgrades xz-utils ufw
   cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
@@ -137,6 +142,26 @@ create_user_and_folders() {
     /srv/media/home-videos /srv/media/music /srv/photos /srv/nextcloud
 }
 
+# Checks that <dir>/<name>.sha256 is signed by the release key and matches <dir>/<name>.
+# The checksum on its own proves nothing: whoever could replace the tarball could replace it too.
+verify_release() {
+  local dir="$1" name="$2"
+  [[ "$RELEASE_PUBLIC_KEY" =~ ^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$ ]] ||
+    die "This copy of the installer has no release key, so it cannot check the download."
+  printf '%s' "$RELEASE_PUBLIC_KEY" | base64 -d >"$dir/release-key.der"
+  base64 -d "$dir/$name.sha256.sig" >"$dir/$name.sha256.sig.bin" 2>/dev/null ||
+    die "The download's signature is damaged."
+  openssl pkeyutl -verify -pubin -keyform DER -inkey "$dir/release-key.der" -rawin \
+    -in "$dir/$name.sha256" -sigfile "$dir/$name.sha256.sig.bin" >/dev/null 2>&1 ||
+    die "The download is not signed by this project, so it was not installed."
+  local line
+  line="$(cat "$dir/$name.sha256")"
+  [[ "$line" =~ ^[0-9a-f]{64}\ [\ *]([^[:space:]]+)$ && "${BASH_REMATCH[1]}" = "$name" ]] ||
+    die "The checksum file is for a different download."
+  (cd "$dir" && sha256sum --check --status "$name.sha256") ||
+    die "The download is corrupt or has been tampered with."
+}
+
 # Sets BUNDLE to a folder holding agent.cjs, selfhost-agent.service, selfhost-cli.mjs, uninstall.sh and dashboard/.
 fetch_bundle() {
   if [ -n "${SELFHOST_BUNDLE_DIR:-}" ]; then
@@ -150,7 +175,8 @@ fetch_bundle() {
   base="https://github.com/${REPO}/releases/download/v${KIT_VERSION}"
   curl -fsSL "$base/$name" -o "$work/$name" || die "Could not download kit version ${KIT_VERSION}."
   curl -fsSL "$base/$name.sha256" -o "$work/$name.sha256" || die "Could not download the checksum."
-  (cd "$work" && sha256sum -c "$name.sha256") || die "The download is corrupt or has been tampered with."
+  curl -fsSL "$base/$name.sha256.sig" -o "$work/$name.sha256.sig" || die "Could not download the signature."
+  verify_release "$work" "$name"
   mkdir "$work/bundle"
   tar -xzf "$work/$name" -C "$work/bundle"
   BUNDLE="$work/bundle"
@@ -167,9 +193,8 @@ install_node() {
   work="$(mktemp -d)"
   base="https://nodejs.org/dist/v${NODE_VERSION}"
   tarball="node-v${NODE_VERSION}-linux-x64.tar.xz"
-  curl -fsSL "$base/$tarball" -o "$work/$tarball"
-  curl -fsSL "$base/SHASUMS256.txt" -o "$work/SHASUMS256.txt"
-  (cd "$work" && grep " ${tarball}\$" SHASUMS256.txt | sha256sum -c -) ||
+  curl -fsSL "$base/$tarball" -o "$work/$tarball" || die "Could not download Node ${NODE_VERSION}."
+  printf '%s  %s\n' "$NODE_SHA256" "$tarball" | (cd "$work" && sha256sum --check --status) ||
     die "The Node download failed its checksum."
   tar -xJf "$work/$tarball" --strip-components=2 -C "$work" "node-v${NODE_VERSION}-linux-x64/bin/node"
   # Move into place instead of overwriting, which fails while the agent is running.

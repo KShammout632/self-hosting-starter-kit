@@ -144,6 +144,7 @@ test.describe('storage page', () => {
     await page.getByRole('button', { name: 'Erase and prepare as a new drive' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('cannot be recovered');
+    await expect(dialog).toContainText('serial number WX12A3456789');
     const erase = dialog.getByRole('button', { name: 'Erase and prepare' });
     await expect(erase).toBeDisabled();
 
@@ -159,7 +160,11 @@ test.describe('storage page', () => {
 
     await expect(page.getByRole('status')).toContainText('Preparing the new drive');
     expect(state.requests.filter((r) => r.path.endsWith('/format'))).toHaveLength(2);
-    expect(state.requests.at(-1)?.body).toEqual({ label: 'media1', confirmName: 'sdb' });
+    expect(state.requests.at(-1)?.body).toEqual({
+      diskId: '5ab1e0c0ffee0001',
+      label: 'media1',
+      confirmName: 'sdb',
+    });
   });
 
   test('never offers to erase the system drive', async ({ page }) => {

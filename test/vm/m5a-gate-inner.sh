@@ -16,7 +16,7 @@ fail() {
   exit 1
 }
 unblock() { iptables -D OUTPUT -p tcp --dport 2283 -j DROP 2>/dev/null || true; }
-trap 'unblock; for s in navidrome immich; do echo "----- $s"; selfhost logs "$s" --tail 40 || true; done; docker ps -a || true' ERR
+trap 'unblock; for s in navidrome immich; do echo "----- $s"; selfhost logs "$s" --tail 40 || true; done; docker ps -a || true; echo "----- agent"; journalctl -u selfhost-agent --no-pager -n 40 || true' ERR
 trap unblock EXIT
 
 call() {

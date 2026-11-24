@@ -89,14 +89,31 @@ describe('storage API', () => {
   });
 
   describe('format', () => {
+    const DISK_ID = '0123456789abcdef';
     const format = (t: TestApp, login: Login, payload: unknown, device = 'sdb') =>
       post(t, login, `/api/disks/by-device/${device}/format`, payload);
 
     it('needs the disk name typed out', async () => {
       const { t, login } = await make();
-      const response = await format(t, login, { label: 'media1', confirmName: 'media1' });
+      const response = await format(t, login, {
+        diskId: DISK_ID,
+        label: 'media1',
+        confirmName: 'media1',
+      });
       expect(response.statusCode).toBe(400);
       expect(response.json().error).toBe('confirmation_mismatch');
+      expect(t.agent.calls.some((c) => c.action === 'disk.format')).toBe(false);
+    });
+
+    it('needs the disk id the page was showing', async () => {
+      const { t, login } = await make();
+      for (const payload of [
+        { label: 'media1', confirmName: 'sdb' },
+        { diskId: 'not-an-id', label: 'media1', confirmName: 'sdb' },
+      ]) {
+        const response = await format(t, login, payload);
+        expect(response.statusCode).toBe(400);
+      }
       expect(t.agent.calls.some((c) => c.action === 'disk.format')).toBe(false);
     });
 
@@ -104,7 +121,11 @@ describe('storage API', () => {
       let time = Date.now();
       const { t, login } = await make({ now: () => time });
       time += REAUTH_AFTER_MS + 1000;
-      const response = await format(t, login, { label: 'media1', confirmName: 'sdb' });
+      const response = await format(t, login, {
+        diskId: DISK_ID,
+        label: 'media1',
+        confirmName: 'sdb',
+      });
       expect(response.statusCode).toBe(403);
       expect(response.json().error).toBe('reauth_required');
     });
@@ -112,20 +133,30 @@ describe('storage API', () => {
     it('only accepts kernel disk names, not partitions or paths', async () => {
       const { t, login } = await make();
       for (const device of ['sdb1', 'loop0', 'sda%3Breboot']) {
-        const response = await format(t, login, { label: 'media1', confirmName: device }, device);
+        const response = await format(
+          t,
+          login,
+          { diskId: DISK_ID, label: 'media1', confirmName: device },
+          device,
+        );
         expect(response.statusCode, device).toBe(400);
       }
     });
 
     it('gets a confirm token from the agent and formats in the background', async () => {
       const { t, login } = await make();
-      const response = await format(t, login, { label: 'media1', confirmName: 'sdb' });
+      const response = await format(t, login, {
+        diskId: DISK_ID,
+        label: 'media1',
+        confirmName: 'sdb',
+      });
       expect(response.statusCode).toBe(202);
       await settle();
       const calls = t.agent.calls.map((c) => c.action);
       expect(calls.indexOf('confirm.issue')).toBeLessThan(calls.indexOf('disk.format'));
       expect(t.agent.calls.find((c) => c.action === 'disk.format')).toMatchObject({
         device: 'sdb',
+        diskId: DISK_ID,
         label: 'media1',
         confirm: 'T'.repeat(43),
       });
@@ -140,7 +171,7 @@ describe('storage API', () => {
         'refused',
         'The drive the server runs from can never be erased here.',
       );
-      await format(t, login, { label: 'media1', confirmName: 'sdb' });
+      await format(t, login, { diskId: DISK_ID, label: 'media1', confirmName: 'sdb' });
       await settle();
       const read = async () =>
         (await t.app.inject({ url: '/api/storage', headers: login.headers })).json().job;
@@ -157,9 +188,14 @@ describe('storage API', () => {
       const { t, login } = await make();
       let release!: () => void;
       t.agent.gate = new Promise<void>((resolve) => (release = resolve));
-      await format(t, login, { label: 'media1', confirmName: 'sdb' });
+      await format(t, login, { diskId: DISK_ID, label: 'media1', confirmName: 'sdb' });
       await settle();
-      const second = await format(t, login, { label: 'media2', confirmName: 'sdc' }, 'sdc');
+      const second = await format(
+        t,
+        login,
+        { diskId: DISK_ID, label: 'media2', confirmName: 'sdc' },
+        'sdc',
+      );
       expect(second.statusCode).toBe(409);
       release();
       await settle();
