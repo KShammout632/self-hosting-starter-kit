@@ -79,7 +79,13 @@ describe('request helpers', () => {
   it('flags destructive actions that need a confirm token', () => {
     expect(
       requiresConfirmToken(
-        request({ id: 'a', action: 'disk.format', device: 'sdb', label: 'media1' }),
+        request({
+          id: 'a',
+          action: 'disk.format',
+          device: 'sdb',
+          diskId: '0123456789abcdef',
+          label: 'media1',
+        }),
       ),
     ).toBe(true);
     expect(
@@ -102,10 +108,25 @@ describe('request helpers', () => {
 
   it('only formats whole disks named by the kernel', () => {
     const format = (device: string) =>
-      parse({ id: 'a1', action: 'disk.format', device, label: 'media1' }).ok;
+      parse({
+        id: 'a1',
+        action: 'disk.format',
+        device,
+        diskId: '0123456789abcdef',
+        label: 'media1',
+      }).ok;
     for (const device of ['sdb', 'nvme0n1', 'vdb']) expect(format(device), device).toBe(true);
     for (const device of ['/dev/sdb', 'sdb1', 'sdb; reboot', '../sdb', 'loop0']) {
       expect(format(device), device).toBe(false);
+    }
+  });
+
+  it('only formats a disk named by the id disk.list gave it', () => {
+    const format = (diskId?: unknown) =>
+      parse({ id: 'a1', action: 'disk.format', device: 'sdb', diskId, label: 'media1' }).ok;
+    expect(format('0123456789abcdef')).toBe(true);
+    for (const diskId of [undefined, '', 'ABCDEF0123456789', '0123456789abcde', 'WX12A3456789']) {
+      expect(format(diskId), String(diskId)).toBe(false);
     }
   });
 

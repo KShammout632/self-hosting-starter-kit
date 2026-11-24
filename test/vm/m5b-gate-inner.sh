@@ -4,14 +4,16 @@
 # download is refused, and that a new version which does not start is rolled back. Used by CI.
 #
 # Both builds must be made with SELFHOST_TEST_BUILD=1, which is the only way the agent accepts a
-# release address on this machine.
-# Usage: sudo bash m5b-gate-inner.sh <old bundle dir> <serve dir> <new version>
-#   <serve dir>/v<new version>/ holds the new release tarball and its .sha256 file.
+# release address on this machine and a signing key other than the built-in one.
+# Usage: sudo bash m5b-gate-inner.sh <old bundle dir> <serve dir> <new version> <signing key file>
+#   <serve dir>/v<new version>/ holds the new release tarball, its .sha256 file and the signature,
+#   made by scripts/package-release.sh with <signing key file>.
 set -euo pipefail
 
-OLD_BUNDLE="${1:?Usage: m5b-gate-inner.sh <old bundle dir> <serve dir> <new version>}"
+OLD_BUNDLE="${1:?Usage: m5b-gate-inner.sh <old bundle dir> <serve dir> <new version> <signing key file>}"
 SERVE="${2:?}"
 NEW="${3:?}"
+SIGNING_KEY="${4:?}"
 PORT=8099
 STATUS=/var/lib/selfhost/kit-update.json
 NAVIDROME=http://127.0.0.1:4533
@@ -20,6 +22,9 @@ IFS=. read -r MAJOR MINOR PATCH <<<"$NEW"
 BAD_CHECKSUM="$MAJOR.$MINOR.$((PATCH + 1))"
 BROKEN="$MAJOR.$MINOR.$((PATCH + 2))"
 WRONG_INSIDE="$MAJOR.$MINOR.$((PATCH + 3))"
+OTHER_SIGNER="$MAJOR.$MINOR.$((PATCH + 4))"
+UNSIGNED="$MAJOR.$MINOR.$((PATCH + 5))"
+PUBLIC_KEY="$(openssl pkey -in "$SIGNING_KEY" -pubout -outform DER | base64 -w0)"
 
 step() { printf '\n##### %s\n' "$*"; }
 fail() {
@@ -52,8 +57,8 @@ OLD="$(agent_version)"
 
 step "Let the agent download from this machine"
 mkdir -p /etc/systemd/system/selfhost-agent.service.d
-printf '[Service]\nEnvironment=SELFHOST_RELEASE_BASE=http://127.0.0.1:%s\n' "$PORT" \
-  >/etc/systemd/system/selfhost-agent.service.d/test-release.conf
+printf '[Service]\nEnvironment=SELFHOST_RELEASE_BASE=http://127.0.0.1:%s\nEnvironment=SELFHOST_RELEASE_KEY=%s\n' \
+  "$PORT" "$PUBLIC_KEY" >/etc/systemd/system/selfhost-agent.service.d/test-release.conf
 systemctl daemon-reload
 systemctl restart selfhost-agent
 agent_is_old() { [ "$(agent_version)" = "$OLD" ]; }
@@ -67,11 +72,14 @@ mkdir -p "$SERVE/v$BAD_CHECKSUM"
 cp "$SERVE/v$NEW/$NAME" "$SERVE/v$BAD_CHECKSUM/selfhost-kit-$BAD_CHECKSUM-linux-x64.tar.gz"
 printf '%s  %s\n' "$(printf 'x' | sha256sum | cut -d' ' -f1)" "selfhost-kit-$BAD_CHECKSUM-linux-x64.tar.gz" \
   >"$SERVE/v$BAD_CHECKSUM/selfhost-kit-$BAD_CHECKSUM-linux-x64.tar.gz.sha256"
+sign() { openssl pkeyutl -sign -inkey "$1" -rawin -in "$2" | base64 -w0 >"$2.sig"; }
+sign "$SIGNING_KEY" "$SERVE/v$BAD_CHECKSUM/selfhost-kit-$BAD_CHECKSUM-linux-x64.tar.gz.sha256"
 
 repack() {
-  local version="$1" inner_version="$2" break_agent="$3"
+  local version="$1" inner_version="$2" break_agent="$3" signer="${4:-good}"
   local work name
   work="$(mktemp -d)"
+  openssl genpkey -algorithm ed25519 -out "$work/other.pem" 2>/dev/null
   name="selfhost-kit-$version-linux-x64.tar.gz"
   mkdir "$work/bundle"
   tar -xzf "$SERVE/v$NEW/$NAME" -C "$work/bundle"
@@ -80,10 +88,16 @@ repack() {
   mkdir -p "$SERVE/v$version"
   tar -czf "$SERVE/v$version/$name" -C "$work/bundle" .
   (cd "$SERVE/v$version" && sha256sum "$name" >"$name.sha256")
+  case "$signer" in
+    good) sign "$SIGNING_KEY" "$SERVE/v$version/$name.sha256" ;;
+    other) sign "$work/other.pem" "$SERVE/v$version/$name.sha256" ;;
+  esac
   rm -rf "$work"
 }
 repack "$BROKEN" "$BROKEN" yes
 repack "$WRONG_INSIDE" "$NEW" no
+repack "$OTHER_SIGNER" "$OTHER_SIGNER" no other
+repack "$UNSIGNED" "$UNSIGNED" no none
 
 (cd "$SERVE" && exec python3 -m http.server "$PORT" --bind 127.0.0.1) >/dev/null 2>&1 &
 SERVER_PID=$!
@@ -105,6 +119,13 @@ call "{\"action\":\"kit.update\",\"version\":\"$NEW\",\"url\":\"http://127.0.0.1
 step "A download that fails its checksum is not installed"
 call "{\"action\":\"kit.update\",\"version\":\"$BAD_CHECKSUM\"}" | jq -e '.ok == false and .error.code == "failed"' >/dev/null
 [ "$(agent_version)" = "$OLD" ] || fail "the agent changed after a bad checksum"
+
+step "A release signed by another key, or not signed at all, is not installed"
+for version in "$OTHER_SIGNER" "$UNSIGNED"; do
+  call "{\"action\":\"kit.update\",\"version\":\"$version\"}" | jq -e '.ok == false and .error.code == "failed"' >/dev/null
+  [ "$(agent_version)" = "$OLD" ] || fail "the agent changed after a badly signed release ($version)"
+  [ ! -e "/opt/selfhost/releases/$version" ] || fail "the badly signed release $version was left on disk"
+done
 
 step "A release that is not the version it says is not installed"
 call "{\"action\":\"kit.update\",\"version\":\"$WRONG_INSIDE\"}" | jq -e '.ok == false and .error.code == "failed"' >/dev/null
@@ -138,4 +159,4 @@ call '{"action":"system.updates.check","refresh":true}' |
   jq -e '.ok == true and (.data.packages | type == "number") and (.data.rebootRequired | type == "boolean")' >/dev/null
 call '{"action":"system.reboot"}' | jq -e '.ok == false and .error.code == "confirm_required"' >/dev/null
 
-printf '\nGATE PASSED: kit %s updated to %s, bad downloads refused, broken release rolled back\n' "$OLD" "$NEW"
+printf '\nGATE PASSED: kit %s updated to %s, bad checksums and signatures refused, broken release rolled back\n' "$OLD" "$NEW"

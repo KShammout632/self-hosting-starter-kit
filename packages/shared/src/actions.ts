@@ -4,6 +4,7 @@ import {
   confirmTarget,
   confirmToken,
   deviceName,
+  diskId,
   filesystemUuid,
   folderSubpath,
   kitVersion,
@@ -45,6 +46,7 @@ export const agentRequest = z.discriminatedUnion('action', [
   action('disk.unmount', { uuid: filesystemUuid }),
   action('disk.format', {
     device: deviceName,
+    diskId,
     label: volumeLabel,
     confirm: confirmToken.optional(),
   }),

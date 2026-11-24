@@ -33,7 +33,7 @@ The kit itself (the dashboard, and the helper that runs on the server) has its o
 
 Go to **Settings**, then **Updates for this kit**, and press **Update now**. **Check for updates** looks for a new version straight away.
 
-- The new version is downloaded and checked against its published checksum before anything changes.
+- The new version is downloaded and checked before anything changes: it must carry this project's signature, and match its published checksum. A download that fails either check is thrown away.
 - The dashboard goes offline for a few minutes while it restarts and rebuilds. Your apps keep running.
 - The server needs the internet during this, like the installer does.
 - If the new version does not start, the old one is put back automatically. The page tells you whether the update finished or was rolled back.
@@ -73,7 +73,9 @@ It stops and removes every app, the dashboard and the helper. Then it asks two s
 
 Type `yes` to say yes, anything else keeps it. Docker, Tailscale and the firewall stay as they are, since other things on the machine may use them.
 
-**Be careful with the second question if you moved libraries to another drive.** Those folders point at the drive, so deleting them deletes the files on the drive too. Answer anything but `yes` unless you really mean it.
+If you moved a library folder to another drive, the files on that drive are **kept** even when you answer yes to the second question. Only files on the server's own drive are deleted, and the script lists the folders it kept.
+
+If you keep the settings, the drives stay connected as they were, so installing the kit again finds them. If you delete the settings, the drives the kit set up are disconnected too. Their files stay on them, and you can add them again from the Storage page after a new install.
 
 ## Backups
 

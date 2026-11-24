@@ -26,6 +26,7 @@ async function main() {
       httpCheck: config.dryRun ? dryRunHttpCheck : httpCheck,
       confirmTokens: createConfirmTokens(),
       ...(config.releaseBase ? { releaseBase: config.releaseBase } : {}),
+      ...(config.releaseKey ? { releaseKey: config.releaseKey } : {}),
     },
   });
 

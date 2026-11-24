@@ -27,7 +27,7 @@ export const storageHandlers: Handlers = {
   },
 
   async 'disk.format'(request, deps) {
-    return { data: await formatDisk(deps, request.device, request.label) };
+    return { data: await formatDisk(deps, request.device, request.diskId, request.label) };
   },
 
   async 'disk.smart'(request, deps) {

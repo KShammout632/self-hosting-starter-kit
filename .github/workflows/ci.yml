@@ -21,6 +21,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Release signing is checked the way the installer checks it
+        run: bash test/release-signing.sh
       - name: Dashboard UI tests (API mocked in the browser)
         run: |
           pnpm --filter @selfhost/web exec playwright install --with-deps chromium
@@ -200,10 +202,11 @@ jobs:
           sed -i "s/\"version\": \"$OLD\"/\"version\": \"$NEW\"/" apps/agent/package.json
           sed -i "s/^KIT_VERSION=\"$OLD\"/KIT_VERSION=\"$NEW\"/" install.sh
           SELFHOST_TEST_BUILD=1 pnpm build
-          bash scripts/package-release.sh "$NEW" "/tmp/serve/v$NEW"
+          openssl genpkey -algorithm ed25519 -out /tmp/test-release-key.pem
+          SELFHOST_SIGNING_KEY_FILE=/tmp/test-release-key.pem bash scripts/package-release.sh "$NEW" "/tmp/serve/v$NEW"
           echo "NEW_VERSION=$NEW" >> "$GITHUB_ENV"
       - name: Update the kit, refuse bad downloads and roll back a broken release
-        run: sudo bash /tmp/old/m5b-gate-inner.sh /tmp/old /tmp/serve "$NEW_VERSION"
+        run: sudo bash /tmp/old/m5b-gate-inner.sh /tmp/old /tmp/serve "$NEW_VERSION" /tmp/test-release-key.pem
 
   # M4b gate: the Tailscale actions. The sign-in checks need only internet access. The tailnet checks
   # (publish addresses, fetch them over https, Nextcloud trusted domains) run when the repository has

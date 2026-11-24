@@ -37,6 +37,8 @@ export interface Deps {
   confirmTokens: ConfirmTokens;
   // Where kit updates download from. Only ever set for dry runs and test builds, see config.ts.
   releaseBase?: string;
+  // Replaces the built-in release signing key. Set under the same rule as releaseBase.
+  releaseKey?: string;
   // Only tests set this, to make the update health wait short.
   timing?: { pollMs: number; healthTimeoutMs: number };
 }

@@ -34,7 +34,9 @@ export const volume = (overrides: Partial<VolumeInfo> = {}): VolumeInfo => ({
 
 export const usbDisk = (volumes: VolumeInfo[] = [volume()]): DiskInfo => ({
   device: 'sdb',
+  diskId: '5ab1e0c0ffee0001',
   model: 'Portable USB Drive',
+  serial: 'WX12A3456789',
   sizeBytes: 2 * 1024 ** 4,
   transport: 'usb',
   removable: false,
@@ -45,7 +47,9 @@ export const usbDisk = (volumes: VolumeInfo[] = [volume()]): DiskInfo => ({
 
 export const systemDisk = (): DiskInfo => ({
   device: 'sda',
+  diskId: '5ab1e0c0ffee0002',
   model: 'Internal SSD',
+  serial: null,
   sizeBytes: 256 * 1024 ** 3,
   transport: 'sata',
   removable: false,

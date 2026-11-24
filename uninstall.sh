@@ -48,16 +48,46 @@ rm -f /etc/systemd/system/selfhost-agent.service /usr/local/bin/selfhost
 systemctl daemon-reload
 rm -rf /opt/selfhost/agent /opt/selfhost/services
 
+MARKER='# Managed by selfhost. Changes may be overwritten.'
+MEDIA_DIRS=(/srv/media /srv/photos /srv/nextcloud)
+
+# The kit's own mount units: drives under /mnt and the library folders bound onto them. Kept along
+# with the settings, so installing again finds the drives where they were.
+kit_mount_units() {
+  local file
+  for file in /etc/systemd/system/*.mount; do
+    [ -f "$file" ] && grep -qxF "$MARKER" "$file" && basename "$file"
+  done
+  return 0
+}
+
 if confirm SELFHOST_DELETE_CONFIG "Also delete service settings and databases (Jellyfin accounts, watch history, and so on)?"; then
   say "Deleting settings"
-  rm -rf /opt/selfhost/config /opt/selfhost/backups /var/lib/selfhost
+  rm -rf --one-file-system /opt/selfhost/config /opt/selfhost/backups /var/lib/selfhost
+  # Library folders first, since each one is bound onto a drive mount.
+  units="$(kit_mount_units | sort -r)"
+  if [ -n "$units" ]; then
+    say "Disconnecting the drives the kit set up (the files on them are not touched)"
+    for unit in $units; do
+      systemctl disable --now "$unit" >/dev/null 2>&1 || echo "Could not disconnect $unit, continuing."
+      rm -f "/etc/systemd/system/$unit"
+    done
+    systemctl daemon-reload
+  fi
 else
   say "Keeping settings in /opt/selfhost/config"
 fi
 
-if confirm SELFHOST_DELETE_MEDIA "Also delete everything in /srv/media, /srv/photos and /srv/nextcloud? This cannot be undone."; then
+if confirm SELFHOST_DELETE_MEDIA "Also delete everything in /srv/media, /srv/photos and /srv/nextcloud? Files on separate drives are kept. This cannot be undone."; then
   say "Deleting media"
-  rm -rf /srv/media /srv/photos /srv/nextcloud
+  # A library folder mapped to a drive is a mount, and plain rm -rf would follow it and erase the
+  # drive. --one-file-system stops at every mount, and the list below says what was kept.
+  kept="$(findmnt -rn -o TARGET | grep -E '^/srv/(media|photos|nextcloud)(/|$)' || true)"
+  rm -rf --one-file-system "${MEDIA_DIRS[@]}" 2>/dev/null || true
+  if [ -n "$kept" ]; then
+    echo "These folders are on a separate drive, so their files were kept:"
+    printf '%s\n' "$kept" | sed 's/^/  /'
+  fi
 else
   say "Keeping your media in /srv"
 fi

@@ -112,7 +112,9 @@ export type VolumeInfo = z.infer<typeof volumeInfo>;
 
 export const diskInfo = z.object({
   device: z.string(),
+  diskId: z.string(),
   model: z.string().nullable(),
+  serial: z.string().nullable(),
   sizeBytes: z.number(),
   transport: z.string().nullable(),
   removable: z.boolean(),

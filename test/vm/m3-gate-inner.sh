@@ -152,17 +152,28 @@ SYSTEM="$(echo "$list" | jq -r '.data.disks[] | select(.isSystem) | .device' | h
 [ -n "$SYSTEM" ] || fail "no disk is marked as the system disk"
 echo "$list" | jq -e --arg d "$SYSTEM" '.data.disks[] | select(.device == $d) | .canFormat == false' >/dev/null \
   || fail "the system disk is offered for formatting"
+disk_id() { echo "$list" | jq -r --arg d "$1" '.data.disks[] | select(.device == $d) | .diskId'; }
+SYSTEM_ID="$(disk_id "$SYSTEM")"
+DEVICE_ID="$(disk_id "$DEVICE")"
+[[ "$DEVICE_ID" =~ ^[a-f0-9]{16}$ && "$SYSTEM_ID" != "$DEVICE_ID" ]] || fail "the disks do not have distinct ids"
 
 step "Formatting the system disk is refused, even with a valid confirmation"
 token="$(call "{\"action\":\"confirm.issue\",\"kind\":\"disk.format\",\"target\":\"$SYSTEM\"}" | jq -r .data.token)"
-call "{\"action\":\"disk.format\",\"device\":\"$SYSTEM\",\"label\":\"oops\",\"confirm\":\"$token\"}" | refused \
+call "{\"action\":\"disk.format\",\"device\":\"$SYSTEM\",\"diskId\":\"$SYSTEM_ID\",\"label\":\"oops\",\"confirm\":\"$token\"}" | refused \
   || fail "the system disk was not refused"
-call '{"action":"disk.format","device":"'"$SYSTEM"'","label":"oops"}' | jq -e '.error.code == "confirm_required"' >/dev/null \
+call '{"action":"disk.format","device":"'"$SYSTEM"'","diskId":"'"$SYSTEM_ID"'","label":"oops"}' | jq -e '.error.code == "confirm_required"' >/dev/null \
   || fail "formatting without a token was not refused"
+
+step "A disk whose id does not match the one chosen is not erased"
+layout="$(lsblk -nro NAME,FSTYPE,UUID "/dev/$DEVICE")"
+token="$(call "{\"action\":\"confirm.issue\",\"kind\":\"disk.format\",\"target\":\"$DEVICE\"}" | jq -r .data.token)"
+call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"diskId\":\"$SYSTEM_ID\",\"label\":\"$LABEL\",\"confirm\":\"$token\"}" | refused \
+  || fail "a disk with a different id was not refused"
+[ "$(lsblk -nro NAME,FSTYPE,UUID "/dev/$DEVICE")" = "$layout" ] || fail "the disk was changed after a refused format"
 
 step "Prepare the spare disk: erase, partition, format and mount it"
 token="$(call "{\"action\":\"confirm.issue\",\"kind\":\"disk.format\",\"target\":\"$DEVICE\"}" | jq -r .data.token)"
-reply="$(call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"label\":\"$LABEL\",\"confirm\":\"$token\"}")"
+reply="$(call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"diskId\":\"$DEVICE_ID\",\"label\":\"$LABEL\",\"confirm\":\"$token\"}")"
 echo "$reply" | ok || fail "disk.format failed: $reply"
 UUID="$(echo "$reply" | jq -r .data.uuid)"
 save_state
@@ -183,12 +194,12 @@ grep -q '^Options=nofail' "/etc/systemd/system/$(unit_name "/mnt/$LABEL")" || fa
 systemctl is-enabled "$(unit_name "/mnt/$LABEL")" >/dev/null || fail "the mount is not enabled for boot"
 
 step "The same token cannot erase anything twice"
-call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"label\":\"again\",\"confirm\":\"$token\"}" \
+call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"diskId\":\"$DEVICE_ID\",\"label\":\"again\",\"confirm\":\"$token\"}" \
   | jq -e '.error.code == "confirm_required"' >/dev/null || fail "a token was accepted twice"
 
 step "A drive that is mounted cannot be formatted"
 token="$(call "{\"action\":\"confirm.issue\",\"kind\":\"disk.format\",\"target\":\"$DEVICE\"}" | jq -r .data.token)"
-call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"label\":\"again\",\"confirm\":\"$token\"}" \
+call "{\"action\":\"disk.format\",\"device\":\"$DEVICE\",\"diskId\":\"$DEVICE_ID\",\"label\":\"again\",\"confirm\":\"$token\"}" \
   | jq -e '.error.code == "in_use"' >/dev/null || fail "a mounted disk was not protected"
 
 step "Health check answers, supported or not"
@@ -233,6 +244,33 @@ if [ "$VIRTUAL" = 1 ] || [ "${GATE_HOTUNPLUG:-0}" = 1 ]; then
   [ -f /srv/media/movies/gate-file ] || fail "the file is gone after replugging"
 else
   echo "Skipped: set GATE_HOTUNPLUG=1 to delete the disk from the running system (VirtualBox: this is the hot unplug)."
+fi
+
+if [ "${GATE_KEEP:-0}" != 1 ]; then
+  # setsid: no terminal, so uninstall.sh asks nothing and only the variables decide.
+  uninstall() { setsid -w env "$@" bash /opt/selfhost/uninstall.sh </dev/null; }
+
+  step "uninstall.sh deleting media keeps the files on a mapped drive"
+  [ -f /srv/media/movies/gate-file ] || fail "the test file is not in the movies folder before uninstalling"
+  echo system >/srv/media/tv/gate-system-file
+  uninstall SELFHOST_DELETE_MEDIA=yes | tee /tmp/uninstall-media.txt
+  [ -f "/mnt/$LABEL/Movies/gate-file" ] || fail "uninstall.sh deleted files on the drive"
+  [ ! -e /srv/media/tv/gate-system-file ] || fail "uninstall.sh kept media that was on the system disk"
+  grep -q '/srv/media/movies' /tmp/uninstall-media.txt || fail "uninstall.sh did not say which folders it kept"
+  mountpoint -q /srv/media/movies || fail "the movies folder was disconnected although settings were kept"
+
+  step "uninstall.sh deleting settings too disconnects the drive and still keeps its files"
+  uninstall SELFHOST_DELETE_CONFIG=yes SELFHOST_DELETE_MEDIA=yes
+  ! grep -lxF '# Managed by selfhost. Changes may be overwritten.' /etc/systemd/system/*.mount 2>/dev/null \
+    || fail "kit mount units are left behind"
+  mountpoint -q /srv/media/movies && fail "the movies folder is still mounted"
+  mountpoint -q "/mnt/$LABEL" && fail "the drive is still mounted"
+  check_dir="$(mktemp -d)"
+  mount "/dev/disk/by-uuid/$UUID" "$check_dir" || fail "the drive could not be mounted to check it"
+  found=0
+  [ -f "$check_dir/Movies/gate-file" ] && found=1
+  umount "$check_dir"
+  [ "$found" = 1 ] || fail "the file on the drive is gone after uninstalling with settings and media"
 fi
 
 if [ "${GATE_KEEP:-0}" = 1 ]; then

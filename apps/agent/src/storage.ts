@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getManifest } from '@selfhost/catalog';
 import {
   LIBRARY_FOLDER_PATHS,
@@ -44,6 +45,8 @@ interface RawDevice {
   label: string | null;
   mountpoints: string[];
   model: string | null;
+  serial: string | null;
+  wwn: string | null;
   tran: string | null;
   rm: boolean;
   fsavail: number | null;
@@ -69,6 +72,8 @@ function parseDevice(raw: Record<string, unknown>): RawDevice {
     label: toText(raw.label),
     mountpoints: mountpoints.filter((m): m is string => typeof m === 'string'),
     model: toText(raw.model),
+    serial: toText(raw.serial),
+    wwn: toText(raw.wwn),
     tran: toText(raw.tran),
     rm: raw.rm === true || raw.rm === '1' || raw.rm === 1,
     fsavail: toNumber(raw.fsavail),
@@ -108,7 +113,16 @@ async function readConfiguredVolumes(deps: Deps): Promise<ConfiguredMount[]> {
   return found;
 }
 
-const LSBLK_COLUMNS = 'NAME,TYPE,SIZE,FSTYPE,UUID,LABEL,MOUNTPOINTS,MODEL,TRAN,RM,FSAVAIL,FSUSED';
+const LSBLK_COLUMNS =
+  'NAME,TYPE,SIZE,FSTYPE,UUID,LABEL,MOUNTPOINTS,MODEL,SERIAL,WWN,TRAN,RM,FSAVAIL,FSUSED';
+
+// Some USB enclosures report no serial or WWN. Then two drives of the same model and size look the
+// same, which is the best lsblk can tell apart.
+const diskIdOf = (disk: RawDevice) =>
+  createHash('sha256')
+    .update(JSON.stringify([disk.serial, disk.wwn, disk.model, disk.size]))
+    .digest('hex')
+    .slice(0, 16);
 
 export async function listDisks(deps: Deps): Promise<DiskInfo[]> {
   const output = await deps.run('lsblk', ['--json', '--bytes', '--output', LSBLK_COLUMNS]);
@@ -165,7 +179,9 @@ export async function listDisks(deps: Deps): Promise<DiskInfo[]> {
 
     disks.push({
       device: disk.name,
+      diskId: diskIdOf(disk),
       model: disk.model,
+      serial: disk.serial,
       sizeBytes: disk.size,
       transport: disk.tran,
       removable: disk.rm,
@@ -387,10 +403,16 @@ async function waitForPartition(deps: Deps, device: string): Promise<string> {
   );
 }
 
-export async function formatDisk(deps: Deps, device: string, label: string) {
+export async function formatDisk(deps: Deps, device: string, diskId: string, label: string) {
   const disk = (await listDisks(deps)).find((d) => d.device === device);
   if (!disk) {
     throw new AgentError('not_found', 'That drive was not found. Check that it is plugged in.');
+  }
+  if (disk.diskId !== diskId) {
+    throw new AgentError(
+      'refused',
+      'The drives changed since this page was opened, so nothing was erased. Close this window and choose the drive again.',
+    );
   }
   if (disk.isSystem) {
     throw new AgentError('refused', 'The drive the server runs from can never be erased here.');
