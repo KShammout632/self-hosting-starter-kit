@@ -80,10 +80,10 @@ function Layout() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="text-xl font-semibold">Home server</span>
-          <nav aria-label="Main" className="flex gap-3 text-sm">
+          <nav aria-label="Main" className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
             {[
               { to: '/', label: 'Home', end: true },
               { to: '/storage', label: 'Storage', end: false },
