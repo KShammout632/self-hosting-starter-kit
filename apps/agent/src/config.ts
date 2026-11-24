@@ -6,6 +6,8 @@ export interface Config {
   socketPath: string;
   releaseBase: string | null;
   releaseKey: string | null;
+  // Print the version and whether this is a test build, then exit. The release script checks it.
+  buildInfo: boolean;
 }
 
 export const DEFAULT_SOCKET_PATH = '/run/selfhost/agent.sock';
@@ -18,7 +20,11 @@ const LOOPBACK_BASE = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
 export function parseConfig(argv: string[], env: NodeJS.ProcessEnv, testBuild = false): Config {
   const { values } = parseArgs({
     args: argv,
-    options: { 'dry-run': { type: 'boolean' }, socket: { type: 'string' } },
+    options: {
+      'dry-run': { type: 'boolean' },
+      socket: { type: 'string' },
+      'build-info': { type: 'boolean' },
+    },
     strict: true,
   });
   const dryRun = values['dry-run'] ?? env.SELFHOST_DRY_RUN === '1';
@@ -31,5 +37,6 @@ export function parseConfig(argv: string[], env: NodeJS.ProcessEnv, testBuild = 
     socketPath: values.socket ?? env.SELFHOST_AGENT_SOCKET ?? DEFAULT_SOCKET_PATH,
     releaseBase: allowed ? requested : null,
     releaseKey: testing && key !== undefined && RELEASE_KEY_PATTERN.test(key) ? key : null,
+    buildInfo: values['build-info'] ?? false,
   };
 }

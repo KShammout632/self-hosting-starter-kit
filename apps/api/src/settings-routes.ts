@@ -33,17 +33,38 @@ export interface LatestRelease {
   url: string;
 }
 
-export type FetchLatest = () => Promise<LatestRelease>;
+// Gets the version installed now, or null when the agent could not be asked.
+export type FetchLatest = (installed: string | null) => Promise<LatestRelease>;
 
-export const fetchLatestFromGitHub: FetchLatest = async () => {
-  const response = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'selfhost-dashboard' },
-    signal: AbortSignal.timeout(8000),
-  });
+const FIRST_STABLE = '1.0.0';
+
+// Versions before 1.0.0 are published as GitHub pre-releases, which GitHub never calls "latest". A
+// server on a beta is offered newer betas; a server on 1.0.0 or later only full releases.
+export function newestRelease(releases: unknown[], installed: string | null): string | null {
+  const includePreReleases = installed !== null && compareVersions(installed, FIRST_STABLE) < 0;
+  let newest: string | null = null;
+  for (const entry of releases) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { tag_name: tag, draft, prerelease } = entry as Record<string, unknown>;
+    if (draft === true || (prerelease === true && !includePreReleases)) continue;
+    const version = typeof tag === 'string' ? parseReleaseTag(tag) : null;
+    if (version && (newest === null || compareVersions(version, newest) > 0)) newest = version;
+  }
+  return newest;
+}
+
+export const fetchLatestFromGitHub: FetchLatest = async (installed) => {
+  const response = await fetch(
+    `https://api.github.com/repos/${RELEASE_REPO}/releases?per_page=30`,
+    {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'selfhost-dashboard' },
+      signal: AbortSignal.timeout(8000),
+    },
+  );
   if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
-  const body = (await response.json()) as { tag_name?: unknown };
-  const version = typeof body.tag_name === 'string' ? parseReleaseTag(body.tag_name) : null;
-  if (!version) throw new Error('Not a version tag');
+  const body = (await response.json()) as unknown;
+  const version = newestRelease(Array.isArray(body) ? body : [], installed);
+  if (!version) throw new Error('No release with a version tag');
   return { version, url: `https://github.com/${RELEASE_REPO}/releases/tag/v${version}` };
 };
 
@@ -115,7 +136,7 @@ export function registerSettingsRoutes(secured: FastifyInstance, deps: SettingsR
         : DAY_MS;
     if (lastLook !== 0 && now() - lastLook < wait) return;
     try {
-      latest = await fetchLatest();
+      latest = await fetchLatest(await currentVersion());
       checkedAt = now();
       failedAt = null;
     } catch {

@@ -90,8 +90,15 @@ Work is split into milestones, one branch each, named like `m5c-docs`. A milesto
 ## Releasing
 
 1. Change `version` in `apps/agent/package.json` and `KIT_VERSION` in `install.sh` to the same value. A unit test fails if they differ.
-2. Merge to `main`.
-3. Push a tag named `v<version>`, for example `v0.2.0`.
+2. Write the release notes in `docs/releases/v<version>.md`. Without that file, GitHub writes notes from the merged pull requests.
+3. Merge to `main`.
+4. Push a tag named `v<version>`, for example `v0.9.1`, straight after the merge. The README installs with `install.sh` from `main`, which downloads the version in `KIT_VERSION`, so new installs fail until that release exists.
+
+Versions are always plain `X.Y.Z`. Anything before 1.0.0 is published as a GitHub pre-release: GitHub never shows it as the latest release, and the dashboard offers it only to a server that is already on a version before 1.0.0. From 1.0.0 on, releases are full releases and servers are offered only those.
+
+The docs links in the installer and the dashboard point at the `v<version>` tag, so they show the docs as they were for the installed version. They work once the tag is pushed.
+
+The release workflow refuses an agent built with `SELFHOST_TEST_BUILD=1`, because a test build accepts a test release address and signing key.
 
 `.github/workflows/release.yml` then runs the checks, builds the release, signs it and publishes three files on GitHub: the tarball, its `.sha256` checksum and `.sha256.sig`, an Ed25519 signature of the checksum file. Before publishing, it checks the release with `scripts/check-release.sh`, which runs the installer's own check, so a signing key that does not match the public key fails the release instead of every install. The installer and the kit update both download the three files and refuse anything whose signature does not match the public key built into them. Until a release for the installer's version exists, the installer cannot download anything.
 

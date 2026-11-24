@@ -60,14 +60,21 @@ describe('config', () => {
       socketPath: '/run/selfhost/agent.sock',
       releaseBase: null,
       releaseKey: null,
+      buildInfo: false,
     });
     expect(parseConfig(['--dry-run', '--socket', '/tmp/a.sock'], {})).toEqual({
       dryRun: true,
       socketPath: '/tmp/a.sock',
       releaseBase: null,
       releaseKey: null,
+      buildInfo: false,
     });
     expect(parseConfig([], { SELFHOST_DRY_RUN: '1' }).dryRun).toBe(true);
+  });
+
+  it('has a --build-info flag for the release script, and rejects unknown flags', () => {
+    expect(parseConfig(['--build-info'], {}).buildInfo).toBe(true);
+    expect(() => parseConfig(['--release-base', 'http://127.0.0.1:1'], {})).toThrow();
   });
 
   describe('test release address', () => {

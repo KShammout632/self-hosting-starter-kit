@@ -23,6 +23,8 @@ jobs:
       - run: pnpm build
       - name: Release signing is checked the way the installer checks it
         run: bash test/release-signing.sh
+      - name: Root scripts never write through a planted symlink
+        run: bash test/root-writes.sh
       - name: Dashboard UI tests (API mocked in the browser)
         run: |
           pnpm --filter @selfhost/web exec playwright install --with-deps chromium
@@ -203,7 +205,8 @@ jobs:
           sed -i "s/^KIT_VERSION=\"$OLD\"/KIT_VERSION=\"$NEW\"/" install.sh
           SELFHOST_TEST_BUILD=1 pnpm build
           openssl genpkey -algorithm ed25519 -out /tmp/test-release-key.pem
-          SELFHOST_SIGNING_KEY_FILE=/tmp/test-release-key.pem bash scripts/package-release.sh "$NEW" "/tmp/serve/v$NEW"
+          SELFHOST_PACKAGE_TEST_BUILD=1 SELFHOST_SIGNING_KEY_FILE=/tmp/test-release-key.pem \
+            bash scripts/package-release.sh "$NEW" "/tmp/serve/v$NEW"
           echo "NEW_VERSION=$NEW" >> "$GITHUB_ENV"
       - name: Update the kit, refuse bad downloads and roll back a broken release
         run: sudo bash /tmp/old/m5b-gate-inner.sh /tmp/old /tmp/serve "$NEW_VERSION" /tmp/test-release-key.pem

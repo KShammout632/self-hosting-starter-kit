@@ -11,7 +11,7 @@
 # RAM and disk checks, because CI machines are smaller than the hardware the kit targets.
 set -euo pipefail
 
-KIT_VERSION="0.1.0"
+KIT_VERSION="0.9.0"
 NODE_VERSION="22.23.3"
 # Pinned here rather than read from nodejs.org, which also serves the download it would be checking.
 NODE_SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"
@@ -19,8 +19,9 @@ NODE_SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"
 # same value in apps/agent/src/release-key.ts.
 RELEASE_PUBLIC_KEY="MCowBQYDK2VwAyEAMaipbJAreKa3ZSIx9zLx3/N4aE7BNaN0k6Hcb5FmKJY="
 REPO="KShammout632/self-hosting-starting-kit"
-HELP_URL="https://github.com/${REPO}/blob/main/docs/troubleshooting.md"
+HELP_URL="https://github.com/${REPO}/blob/v${KIT_VERSION}/docs/troubleshooting.md"
 LOG_FILE="/var/log/selfhost-install.log"
+STATE_DIR=/var/lib/selfhost
 
 say() { printf '\n==> %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
@@ -136,7 +137,7 @@ create_user_and_folders() {
 
   install -d -m 0755 /opt/selfhost /opt/selfhost/agent /opt/selfhost/services \
     /opt/selfhost/config /opt/selfhost/backups
-  install -d -m 0750 -o selfhost -g selfhost /var/lib/selfhost
+  install -d -m 0750 -o selfhost -g selfhost "$STATE_DIR"
   # Group-writable and setgid, so people in the selfhost group can add media over SSH or Samba later.
   install -d -m 2775 -o selfhost -g selfhost /srv/media /srv/media/movies /srv/media/tv \
     /srv/media/home-videos /srv/media/music /srv/photos /srv/nextcloud
@@ -235,13 +236,18 @@ EOF
 # exists, so the file being absent next to an existing database means setup is already done.
 prepare_setup_code() {
   SETUP_CODE=""
-  local code_file=/var/lib/selfhost/setup-code
-  if [ -e "$code_file" ] || [ -e /var/lib/selfhost/selfhost.db ]; then return; fi
+  local code_file="$STATE_DIR/setup-code" private
+  if { [ -f "$code_file" ] && [ ! -L "$code_file" ]; } || [ -e "$STATE_DIR/selfhost.db" ]; then return; fi
   SETUP_CODE="$(head -c 2048 /dev/urandom | tr -dc 'A-HJ-NP-Z2-9' | cut -c1-8)"
   [ "${#SETUP_CODE}" -eq 8 ] || die "Could not create a setup code."
-  printf '%s' "$SETUP_CODE" | sha256sum | cut -d' ' -f1 >"$code_file"
-  chown selfhost:selfhost "$code_file"
-  chmod 0640 "$code_file"
+  # The dashboard's user owns $STATE_DIR and could plant a symlink there for root to write through.
+  # The file is made in a folder only root can use, then renamed over whatever is at the final name.
+  private="$(mktemp -d "$(dirname "$STATE_DIR")/selfhost-install.XXXXXX")"
+  printf '%s' "$SETUP_CODE" | sha256sum | cut -d' ' -f1 >"$private/setup-code"
+  chown selfhost:selfhost "$private/setup-code"
+  chmod 0640 "$private/setup-code"
+  mv -f "$private/setup-code" "$code_file"
+  rmdir "$private"
 }
 
 install_dashboard() {

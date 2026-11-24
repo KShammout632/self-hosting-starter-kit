@@ -27,6 +27,17 @@ script_version="$(sed -n 's/^KIT_VERSION="\(.*\)"$/\1/p' install.sh)"
   exit 1
 }
 
+# A test build accepts a loopback release address and a test signing key from its environment, so
+# it must never be published. Only the kit update gate packages one, for a release it serves itself.
+test_build=false
+[ "${SELFHOST_PACKAGE_TEST_BUILD:-}" != 1 ] || test_build=true
+build_info="$(node apps/agent/dist/agent.cjs --build-info)"
+[ "$build_info" = "{\"version\":\"$VERSION\",\"testBuild\":$test_build}" ] || {
+  echo "The built agent is not a release build of $VERSION: $build_info" >&2
+  echo "Run pnpm build without SELFHOST_TEST_BUILD." >&2
+  exit 1
+}
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 bash scripts/make-bundle.sh "$work/bundle"

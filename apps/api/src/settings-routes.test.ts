@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { KitUpdateStatus } from '@selfhost/shared';
 import { AgentRequestError } from './agent-client';
 import { REAUTH_AFTER_MS } from './auth';
+import { newestRelease } from './settings-routes';
 import {
   PASSWORD,
   createTestApp,
@@ -331,5 +332,35 @@ describe('audit log', () => {
     expect(entries).toHaveLength(2);
     expect(entries[0]).toMatchObject({ event: 'system.updates.apply', actor: 'admin' });
     expect((await get(t, login, '/api/settings/audit?limit=100000')).statusCode).toBe(400);
+  });
+});
+
+describe('choosing the newest release', () => {
+  const releases = [
+    { tag_name: 'v1.0.0', prerelease: false, draft: false },
+    { tag_name: 'v1.1.0', prerelease: true, draft: false },
+    { tag_name: 'v0.9.1', prerelease: true, draft: false },
+    { tag_name: 'v2.0.0', prerelease: false, draft: true },
+    { tag_name: 'v9.0.0-rc.1', prerelease: false, draft: false },
+    { tag_name: 42 },
+    null,
+  ];
+
+  it('offers pre-releases to a server that is on a beta', () => {
+    expect(newestRelease(releases, '0.9.0')).toBe('1.1.0');
+    expect(newestRelease([releases[2]], '0.9.0')).toBe('0.9.1');
+  });
+
+  it('offers only full releases from 1.0.0 on', () => {
+    expect(newestRelease(releases, '1.0.0')).toBe('1.0.0');
+  });
+
+  it('skips drafts and tags that are not plain versions', () => {
+    expect(newestRelease(releases, '0.9.0')).not.toBe('2.0.0');
+    expect(newestRelease([releases[3], releases[4], releases[5], releases[6]], '0.9.0')).toBeNull();
+  });
+
+  it('offers no pre-release when the installed version is unknown', () => {
+    expect(newestRelease([releases[2]], null)).toBeNull();
   });
 });

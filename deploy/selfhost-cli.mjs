@@ -2,10 +2,20 @@
 // over the agent socket and prints the answer in plain English. All rules live in the agent.
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, chownSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  fchmodSync,
+  fchownSync,
+  openSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeSync,
+} from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import { createInterface } from 'node:readline/promises';
+import { pathToFileURL } from 'node:url';
 
 const SOCKET_PATH = process.env.SELFHOST_AGENT_SOCKET ?? '/run/selfhost/agent.sock';
 const SETUP_CODE_FILE = process.env.SELFHOST_SETUP_CODE_FILE ?? '/var/lib/selfhost/setup-code';
@@ -33,6 +43,26 @@ Commands:
 Services: ${Object.keys(SERVICES).join(', ')}`;
 
 class UserError extends Error {}
+
+// The setup code file sits in /var/lib/selfhost, which the dashboard's user owns. Writing to a fixed
+// name as root would follow a symlink planted there and could hand any file on the system to that
+// user. A new file with a random name and O_EXCL never follows a link, its owner is set through the
+// open file, and the rename replaces whatever is at the final name instead of following it.
+export function replaceFileSafely(file, content, uid, gid, mode) {
+  const temp = `${file}.${randomBytes(8).toString('hex')}.tmp`;
+  const fd = openSync(temp, 'wx', mode);
+  try {
+    writeSync(fd, content);
+    fchownSync(fd, uid, gid);
+    fchmodSync(fd, mode);
+  } catch (error) {
+    closeSync(fd);
+    rmSync(temp, { force: true });
+    throw error;
+  }
+  closeSync(fd);
+  renameSync(temp, file);
+}
 
 function ask(request) {
   return new Promise((resolve, reject) => {
@@ -155,12 +185,14 @@ async function main(argv) {
         throw new UserError('Run this with sudo: sudo selfhost reset-password');
       const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       const code = Array.from(randomBytes(8), (byte) => alphabet[byte % alphabet.length]).join('');
-      writeFileSync(SETUP_CODE_FILE, createHash('sha256').update(code).digest('hex') + '\n', {
-        mode: 0o640,
-      });
       const id = (flag) => Number(execFileSync('id', [flag, 'selfhost'], { encoding: 'utf8' }));
-      chownSync(SETUP_CODE_FILE, id('-u'), id('-g'));
-      chmodSync(SETUP_CODE_FILE, 0o640);
+      replaceFileSafely(
+        SETUP_CODE_FILE,
+        createHash('sha256').update(code).digest('hex') + '\n',
+        id('-u'),
+        id('-g'),
+        0o640,
+      );
       console.log(
         `Open http://${lanAddress()}:8080 and use this setup code to choose a new password:\n`,
       );
@@ -237,7 +269,14 @@ function parseTailValue(args) {
   return index === -1 ? undefined : args[index + 1];
 }
 
-main(process.argv.slice(2)).catch((error) => {
-  console.error(error instanceof UserError ? error.message : `Something went wrong: ${error}`);
-  process.exit(1);
-});
+// The unit tests import this file, and importing it must not run a command.
+const runDirectly =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+
+if (runDirectly) {
+  main(process.argv.slice(2)).catch((error) => {
+    console.error(error instanceof UserError ? error.message : `Something went wrong: ${error}`);
+    process.exit(1);
+  });
+}

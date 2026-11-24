@@ -14,12 +14,17 @@ DASHBOARD=/opt/selfhost/dashboard
 AGENT_DIR=/opt/selfhost/agent
 NODE="$AGENT_DIR/node"
 
+# The status file's folder belongs to the dashboard's user, who could plant a symlink there for root
+# to write through. Each status is written in a folder only root can use, then renamed into place.
+PRIVATE="$(mktemp -d "$(dirname "$(dirname "$STATUS_FILE")")/selfhost-update.XXXXXX")"
+trap 'rm -rf "$PRIVATE"' EXIT
+
 write_status() {
   local state="$1" message="$2"
   printf '{"state":"%s","version":"%s","message":"%s","at":"%s"}\n' \
-    "$state" "$VERSION" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$STATUS_FILE.tmp"
-  chmod 0644 "$STATUS_FILE.tmp"
-  mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
+    "$state" "$VERSION" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$PRIVATE/status"
+  chmod 0644 "$PRIVATE/status"
+  mv -f "$PRIVATE/status" "$STATUS_FILE"
 }
 
 install_agent_files() {

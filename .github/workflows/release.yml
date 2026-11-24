@@ -44,4 +44,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" release/* --title "$TAG" --generate-notes
+          flags=(--title "$TAG")
+          notes="docs/releases/$TAG.md"
+          if [ -f "$notes" ]; then flags+=(--notes-file "$notes"); else flags+=(--generate-notes); fi
+          # Versions before 1.0.0 are betas. GitHub never offers a pre-release as the latest
+          # release, and the dashboard offers one only to a server that is already on a beta.
+          if [[ "$VERSION" == 0.* ]]; then flags+=(--prerelease); fi
+          gh release create "$TAG" release/* "${flags[@]}"

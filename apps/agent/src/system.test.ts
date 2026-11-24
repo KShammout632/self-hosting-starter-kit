@@ -67,6 +67,9 @@ function makeHost(options: Options = {}) {
       return [];
     },
     async setOwner() {},
+    async realPath(path) {
+      return path;
+    },
   };
 
   const deps: Deps = {
