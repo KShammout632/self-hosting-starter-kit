@@ -14,6 +14,7 @@ import {
   snapshotId,
   tailscaleHostname,
   volumeLabel,
+  REBOOT_TARGET,
   type ConfirmKind,
 } from './primitives';
 
@@ -63,8 +64,9 @@ export const agentRequest = z.discriminatedUnion('action', [
   action('tailscale.serve.apply', {}),
 
   action('system.info', {}),
-  action('system.reboot', {}),
-  action('system.updates.check', {}),
+  action('system.reboot', { confirm: confirmToken.optional() }),
+  // refresh asks apt for new package lists first, which is slow. Without it the answer is from the last refresh.
+  action('system.updates.check', { refresh: z.boolean().default(false) }),
   action('system.updates.apply', {}),
 
   action('snapshot.create', service),
@@ -121,7 +123,16 @@ const TAILSCALE_LOCKED_ACTIONS: ReadonlySet<AgentAction> = new Set([
   'tailscale.serve.apply',
 ]);
 
+// These change the whole server, so they wait for every other change to finish and block new ones.
+const EXCLUSIVE_ACTIONS: ReadonlySet<AgentAction> = new Set([
+  'kit.update',
+  'system.updates.apply',
+  'system.reboot',
+]);
+export const EXCLUSIVE_LOCK = 'system';
+
 export function lockKey(request: AgentRequest): string | null {
+  if (EXCLUSIVE_ACTIONS.has(request.action)) return EXCLUSIVE_LOCK;
   if (STORAGE_LOCKED_ACTIONS.has(request.action)) return 'storage';
   if (TAILSCALE_LOCKED_ACTIONS.has(request.action)) return 'tailscale';
   return serviceLockKey(request);
@@ -140,6 +151,9 @@ export function confirmBinding(request: AgentRequest): ConfirmBinding | null {
   }
   if (request.action === 'snapshot.restore') {
     return { kind: 'snapshot.restore', target: request.service };
+  }
+  if (request.action === 'system.reboot') {
+    return { kind: 'system.reboot', target: REBOOT_TARGET };
   }
   return null;
 }

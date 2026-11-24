@@ -9,6 +9,7 @@ import {
   serviceName,
   type BusyAction,
   type ConfirmIssueResult,
+  type KitUpdateStatus,
   type ServiceCredentialsResult,
   type ServiceName,
   type SessionInfo,
@@ -18,6 +19,7 @@ import type { AuditLog } from './audit';
 import { REAUTH_AFTER_MS, SESSION_TTL_MS, type Auth } from './auth';
 import type { StatusMonitor } from './monitor';
 import { registerRemoteRoutes } from './remote-routes';
+import { registerSettingsRoutes, type FetchLatest } from './settings-routes';
 import { registerStorageRoutes } from './storage-routes';
 
 const COOKIE = 'selfhost_session';
@@ -29,6 +31,8 @@ export interface AppDeps {
   audit: AuditLog;
   monitor: StatusMonitor;
   webDir: string | null;
+  fetchLatest?: FetchLatest;
+  readUpdateStatus?: () => KitUpdateStatus | null;
   now?: () => number;
   logger?: boolean;
 }
@@ -45,6 +49,10 @@ const setupBody = z.object({
 });
 const wizardBody = z.object({ skipped: z.boolean() });
 const loginBody = z.object({ password: z.string().min(1).max(200) });
+const passwordBody = z.object({
+  current: z.string().min(1).max(200),
+  next: z.string().min(10).max(200),
+});
 const uninstallBody = z.object({
   deleteData: z.boolean(),
   confirmName: z.string().max(64).optional(),
@@ -273,6 +281,43 @@ export async function buildApp(deps: AppDeps) {
       return { ok: true };
     });
 
+    // Saving a new password signs every session out, so this one is started again for the owner.
+    secured.post('/api/settings/password', strictLimit, async (request, reply) => {
+      const body = passwordBody.safeParse(request.body);
+      if (!body.success) {
+        return sendError(
+          reply,
+          400,
+          'invalid_input',
+          'Enter your current password and a new one of at least 10 characters.',
+        );
+      }
+      const locked = auth.lockedForSeconds();
+      if (locked > 0) return sendLocked(reply, locked);
+      if (!(await auth.checkPassword(body.data.current))) {
+        audit.record({ actor: 'admin', event: 'password.change', outcome: 'denied' });
+        const nowLocked = auth.lockedForSeconds();
+        if (nowLocked > 0) return sendLocked(reply, nowLocked);
+        return sendError(reply, 401, 'invalid_credentials', 'Your current password is not right.');
+      }
+      if (body.data.next === body.data.current) {
+        return sendError(
+          reply,
+          400,
+          'same_password',
+          'Choose a password you have not used just now.',
+        );
+      }
+      await auth.setPassword(body.data.next);
+      audit.record({ actor: 'admin', event: 'password.change', outcome: 'ok' });
+      return {
+        state: 'logged_in',
+        csrfToken: startSession(request, reply),
+        reauthRequired: false,
+        wizardComplete: auth.wizardComplete(),
+      } satisfies SessionInfo;
+    });
+
     secured.post('/api/wizard/complete', async (request, reply) => {
       const body = wizardBody.safeParse(request.body);
       if (!body.success) {
@@ -423,6 +468,14 @@ export async function buildApp(deps: AppDeps) {
     });
 
     registerStorageRoutes(secured, { agent, audit, monitor, now, sendError });
+    registerSettingsRoutes(secured, {
+      agent,
+      audit,
+      now,
+      sendError,
+      fetchLatest: deps.fetchLatest,
+      readUpdateStatus: deps.readUpdateStatus,
+    });
 
     const openEventStream = (request: FastifyRequest, reply: FastifyReply) => {
       reply.hijack();

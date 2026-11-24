@@ -174,6 +174,37 @@ jobs:
       - name: Update a service, then roll one back
         run: sudo bash /tmp/bundle/m5a-gate-inner.sh /tmp/bundle
 
+  # M5b gate: a kit update from one release to the next, served from this machine. Both builds use
+  # SELFHOST_TEST_BUILD=1, the only way the agent accepts a release address on loopback.
+  kit-update-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the old version
+        run: |
+          SELFHOST_TEST_BUILD=1 pnpm build
+          bash scripts/make-bundle.sh /tmp/old
+          cp test/vm/m5b-gate-inner.sh test/vm/agent-call.mjs /tmp/old/
+      - name: Build and package the new version
+        run: |
+          OLD="$(node -p 'require("./apps/agent/package.json").version')"
+          NEW="$(node -p 'const [a, b, c] = process.argv[1].split("."); `${a}.${b}.${Number(c) + 10}`' "$OLD")"
+          sed -i "s/\"version\": \"$OLD\"/\"version\": \"$NEW\"/" apps/agent/package.json
+          sed -i "s/^KIT_VERSION=\"$OLD\"/KIT_VERSION=\"$NEW\"/" install.sh
+          SELFHOST_TEST_BUILD=1 pnpm build
+          bash scripts/package-release.sh "$NEW" "/tmp/serve/v$NEW"
+          echo "NEW_VERSION=$NEW" >> "$GITHUB_ENV"
+      - name: Update the kit, refuse bad downloads and roll back a broken release
+        run: sudo bash /tmp/old/m5b-gate-inner.sh /tmp/old /tmp/serve "$NEW_VERSION"
+
   # M4b gate: the Tailscale actions. The sign-in checks need only internet access. The tailnet checks
   # (publish addresses, fetch them over https, Nextcloud trusted domains) run when the repository has
   # a TS_AUTHKEY secret: an ephemeral, reusable auth key from a throwaway tailnet with MagicDNS and

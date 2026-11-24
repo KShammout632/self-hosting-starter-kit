@@ -4,3 +4,4 @@ export * from './results';
 export * from './protocol';
 export * from './logs';
 export * from './api';
+export * from './version';

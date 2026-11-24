@@ -189,7 +189,8 @@ The agent is the only component with root access, and it only performs actions f
 
 - Every argument is an enum, UUID, number with bounds, or a string matching a strict regex. No free-form paths or commands.
 - Commands run with `execFile` and fixed argument arrays, never through a shell.
-- Destructive actions (`disk.format`, `service.uninstall` with data) require a `confirm` token the API only issues after the user types the disk or service name.
+- Destructive actions (`disk.format`, `service.uninstall` with data) require a `confirm` token the API only issues after the user types the disk or service name. `snapshot.restore` and `system.reboot` also need a token, because they take services offline.
+- `kit.update`, `system.updates.apply` and `system.reboot` change the whole server, so they wait for every other action to finish and block new ones while they run. A kit update only goes to a newer version, never back. The release address is fixed to GitHub; only a dry run or a test build accepts a loopback address from agent configuration (never from a request).
 - One action per service at a time (per-service lock), so a double click cannot run two installs.
 - `--dry-run` mode logs what would happen without doing it, for development on a laptop.
 

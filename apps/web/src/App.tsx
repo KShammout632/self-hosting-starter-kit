@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { SESSION_KEY, useSession } from '@/lib/session';
 import { useStatus, useStatusStream } from '@/lib/status';
+import { kitIsBusy, useKit, useSystemUpdates } from '@/lib/use-settings';
 import { LoginPage, SetupPage } from '@/pages/auth-pages';
 import { HomePage } from '@/pages/home-page';
 import { RemotePage } from '@/pages/remote-page';
+import { SettingsPage } from '@/pages/settings-page';
 import { ServicePage } from '@/pages/service-page';
 import { StoragePage } from '@/pages/storage-page';
 import { WizardPage } from '@/pages/wizard-page';
@@ -40,6 +42,31 @@ function AgentBanner() {
   );
 }
 
+function ServerNotices() {
+  const kit = useKit();
+  const system = useSystemUpdates();
+  const notices: string[] = [];
+  if (system.data?.rebootRequired) {
+    notices.push('The server needs a restart to finish installing updates.');
+  }
+  if (kit.data?.updateAvailable && !kitIsBusy(kit.data)) {
+    notices.push('A new version of the kit is available.');
+  }
+  if (notices.length === 0) return null;
+  return (
+    <div role="status" className="rounded-md border p-3 text-sm">
+      {notices.map((notice) => (
+        <p key={notice}>
+          {notice}{' '}
+          <NavLink to="/settings" className="text-primary underline">
+            Open settings
+          </NavLink>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function Layout() {
   const client = useQueryClient();
   const navigate = useNavigate();
@@ -61,6 +88,7 @@ function Layout() {
               { to: '/', label: 'Home', end: true },
               { to: '/storage', label: 'Storage', end: false },
               { to: '/remote', label: 'Remote access', end: false },
+              { to: '/settings', label: 'Settings', end: false },
             ].map((link) => (
               <NavLink
                 key={link.to}
@@ -80,6 +108,7 @@ function Layout() {
         </Button>
       </header>
       <AgentBanner />
+      <ServerNotices />
       <main>
         <Outlet />
       </main>
@@ -115,6 +144,7 @@ export function App() {
           <Route path="/services/:name" element={<ServicePage />} />
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/remote" element={<RemotePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

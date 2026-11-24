@@ -27,6 +27,8 @@ export interface FakeAgent extends AgentClient {
   mappedFolders: Record<string, { mountLabel: string; subpath: string }>;
   tailscale: TailscaleStatusResult;
   onlyService: string | null;
+  kitVersion: string;
+  updates: { packages: number; security: number; rebootRequired: boolean };
 }
 
 export const SIGNED_OUT: TailscaleStatusResult = {
@@ -65,6 +67,8 @@ export function createFakeAgent(): FakeAgent {
     mappedFolders: {},
     tailscale: SIGNED_OUT,
     onlyService: null,
+    kitVersion: '0.1.0',
+    updates: { packages: 3, security: 1, rebootRequired: false },
     async call(request) {
       if (agent.unreachable) throw new AgentRequestError('unreachable', 'down');
       agent.calls.push(request);
@@ -99,6 +103,10 @@ export function createFakeAgent(): FakeAgent {
                 ],
         } as never;
       }
+      if (request.action === 'agent.version') {
+        return { version: agent.kitVersion, dryRun: false } as never;
+      }
+      if (request.action === 'system.updates.check') return agent.updates as never;
       if (request.action === 'system.info') {
         return {
           hostname: 'box',
@@ -179,7 +187,14 @@ export function createFakeAgent(): FakeAgent {
   return agent;
 }
 
-export async function createTestApp(options: { now?: () => number; webDir?: string | null } = {}) {
+export async function createTestApp(
+  options: {
+    now?: () => number;
+    webDir?: string | null;
+    fetchLatest?: AppDeps['fetchLatest'];
+    readUpdateStatus?: AppDeps['readUpdateStatus'];
+  } = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), 'selfhost-api-'));
   const setupCodeFile = join(dir, 'setup-code');
   writeFileSync(setupCodeFile, sha256('ABCD2345') + '\n');
@@ -199,6 +214,8 @@ export async function createTestApp(options: { now?: () => number; webDir?: stri
     monitor,
     webDir: options.webDir ?? null,
     now: options.now,
+    fetchLatest: options.fetchLatest,
+    readUpdateStatus: options.readUpdateStatus ?? (() => null),
   };
   const app = await buildApp(deps);
   return { app, agent, auth, audit, monitor, db, setupCodeFile };

@@ -158,3 +158,35 @@ export const folderUsageResult = z.object({
   nearlyFull: z.boolean(),
 });
 export type FolderUsageResult = z.infer<typeof folderUsageResult>;
+
+export const systemUpdatesCheckResult = z.object({
+  packages: z.number().int().min(0),
+  security: z.number().int().min(0),
+  rebootRequired: z.boolean(),
+});
+export type SystemUpdatesCheckResult = z.infer<typeof systemUpdatesCheckResult>;
+
+export const systemUpdatesApplyResult = z.object({
+  upgraded: z.number().int().min(0),
+  rebootRequired: z.boolean(),
+});
+export type SystemUpdatesApplyResult = z.infer<typeof systemUpdatesApplyResult>;
+
+export const kitUpdateResult = z.object({
+  started: z.literal(true),
+  version: z.string(),
+});
+export type KitUpdateResult = z.infer<typeof kitUpdateResult>;
+
+export const KIT_UPDATE_STATES = ['running', 'done', 'rolled_back', 'failed'] as const;
+
+// Written by the update script to /var/lib/selfhost/kit-update.json, because the agent and the
+// dashboard are both restarted while it runs. The dashboard reads it once it is back.
+export const kitUpdateStatus = z.object({
+  state: z.enum(KIT_UPDATE_STATES),
+  version: z.string(),
+  message: z.string(),
+  at: z.string(),
+});
+export type KitUpdateStatus = z.infer<typeof kitUpdateStatus>;
+export const KIT_UPDATE_STATUS_FILE = '/var/lib/selfhost/kit-update.json';

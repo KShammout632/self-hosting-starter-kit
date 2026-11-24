@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 export interface RunOptions {
   timeoutMs?: number;
   maxBufferBytes?: number;
+  env?: Readonly<Record<string, string>>;
 }
 
 export type Runner = (
@@ -21,6 +22,7 @@ export const run: Runner = async (file, args, options = {}) => {
     timeout: options.timeoutMs ?? 15_000,
     maxBuffer: options.maxBufferBytes ?? 1024 * 1024,
     encoding: 'utf8',
+    env: options.env ? { ...process.env, ...options.env } : undefined,
   });
   return stdout;
 };
@@ -87,6 +89,13 @@ const DRY_RUN_FIXTURES: Record<string, string> = {
     ata_smart_attributes: { table: [{ id: 5, raw: { value: 0 } }] },
   }),
   systemctl: '',
+  'systemd-run': '',
+  curl: '',
+  'apt-get': [
+    'Inst libssl3t64 [3.0.13-0ubuntu3.4] (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates, Ubuntu:24.04/noble-security [amd64])',
+    'Inst tzdata [2024a-2ubuntu1] (2025b-0ubuntu0.24.04 Ubuntu:24.04/noble-updates [all])',
+    '',
+  ].join('\n'),
   wipefs: '',
   parted: '',
   udevadm: '',

@@ -2,6 +2,7 @@ import os from 'node:os';
 import { getManifest } from '@selfhost/catalog';
 import si from 'systeminformation';
 import {
+  REBOOT_TARGET,
   deviceName,
   serviceName,
   type AgentAction,
@@ -22,6 +23,7 @@ import { credentialsPending, serviceHandlers } from './service-handlers';
 import { updateHandlers, updateInfo } from './update-handlers';
 import { missingFolders } from './storage';
 import { storageHandlers } from './storage-handlers';
+import { systemHandlers } from './system-handlers';
 import { tailscaleHandlers } from './tailscale';
 
 export interface Deps {
@@ -33,6 +35,8 @@ export interface Deps {
   stream: LineStreamer;
   httpCheck: HttpChecker;
   confirmTokens: ConfirmTokens;
+  // Where kit updates download from. Only ever set for dry runs and test builds, see config.ts.
+  releaseBase?: string;
   // Only tests set this, to make the update health wait short.
   timing?: { pollMs: number; healthTimeoutMs: number };
 }
@@ -65,6 +69,7 @@ export const handlers: Handlers = {
   ...updateHandlers,
   ...storageHandlers,
   ...tailscaleHandlers,
+  ...systemHandlers,
 
   async 'agent.version'(_request, deps) {
     const data: AgentVersionResult = { version: pkg.version, dryRun: deps.dryRun };
@@ -98,9 +103,11 @@ export const handlers: Handlers = {
 
   async 'confirm.issue'(request, deps) {
     const validTarget =
-      request.kind !== 'disk.format'
-        ? serviceName.safeParse(request.target).success
-        : deviceName.safeParse(request.target).success;
+      request.kind === 'disk.format'
+        ? deviceName.safeParse(request.target).success
+        : request.kind === 'system.reboot'
+          ? request.target === REBOOT_TARGET
+          : serviceName.safeParse(request.target).success;
     if (!validTarget) throw new AgentError('invalid_request', 'Request arguments are not valid.');
     const data: ConfirmIssueResult = {
       token: deps.confirmTokens.issue(request.kind, request.target),

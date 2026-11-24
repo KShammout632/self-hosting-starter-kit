@@ -1,12 +1,15 @@
 import type { Page, Route } from '@playwright/test';
 import {
   LIBRARY_FOLDERS,
+  type AuditEntryView,
   type DiskInfo,
   type FolderUsageResult,
+  type KitSnapshot,
   type RemoteSnapshot,
   type ServiceSummary,
   type SessionInfo,
   type SmartResult,
+  type SystemUpdatesSnapshot,
   type StatusSnapshot,
   type StorageSnapshot,
   type VolumeInfo,
@@ -110,7 +113,32 @@ export const readyRemote = (): RemoteSnapshot =>
     ],
   });
 
+export const newKit = (overrides: Partial<KitSnapshot> = {}): KitSnapshot => ({
+  currentVersion: '0.1.0',
+  latestVersion: '0.1.0',
+  updateAvailable: false,
+  releaseNotesUrl: 'https://github.com/example/releases/tag/v0.1.0',
+  checkedAt: new Date().toISOString(),
+  checkFailed: false,
+  job: null,
+  update: null,
+  ...overrides,
+});
+
+export const newSystemUpdates = (
+  overrides: Partial<SystemUpdatesSnapshot> = {},
+): SystemUpdatesSnapshot => ({
+  packages: 0,
+  security: 0,
+  rebootRequired: false,
+  job: null,
+  ...overrides,
+});
+
 export interface MockState {
+  kit: KitSnapshot;
+  systemUpdates: SystemUpdatesSnapshot;
+  audit: AuditEntryView[];
   remote: RemoteSnapshot;
   session: SessionInfo;
   service: ServiceSummary;
@@ -131,6 +159,9 @@ export function newState(overrides: Partial<MockState> = {}): MockState {
       reauthRequired: false,
       wizardComplete: true,
     },
+    kit: newKit(),
+    systemUpdates: newSystemUpdates(),
+    audit: [],
     remote: newRemote(),
     service: jellyfin(),
     agentReachable: true,
@@ -231,6 +262,48 @@ export async function mockApi(page: Page, state: MockState) {
 
     if (path === '/api/services') return json(route, 200, snapshot(state));
     if (path === '/api/status/stream') return events(route, [['status', snapshot(state)]]);
+
+    const needsPassword = () =>
+      json(route, 403, { error: 'reauth_required', message: 'Enter your password to continue.' });
+
+    if (path === '/api/settings/kit') return json(route, 200, state.kit);
+    if (path === '/api/settings/kit/check' && method === 'POST') return json(route, 200, state.kit);
+    if (path === '/api/settings/kit/update' && method === 'POST') {
+      if (state.reauthNeeded) return needsPassword();
+      state.kit = {
+        ...state.kit,
+        updateAvailable: false,
+        update: {
+          state: 'running',
+          version: state.kit.latestVersion ?? '0.2.0',
+          message: 'Installing the new version.',
+          at: new Date().toISOString(),
+        },
+      };
+      return json(route, 202, { started: true });
+    }
+    if (path === '/api/settings/system') return json(route, 200, state.systemUpdates);
+    if (path === '/api/settings/system/check' && method === 'POST') {
+      return json(route, 200, state.systemUpdates);
+    }
+    if (path === '/api/settings/system/apply' && method === 'POST') {
+      if (state.reauthNeeded) return needsPassword();
+      state.systemUpdates = { ...state.systemUpdates, packages: 0, security: 0 };
+      return json(route, 202, { started: true });
+    }
+    if (path === '/api/settings/reboot' && method === 'POST') {
+      return json(route, 202, { started: true });
+    }
+    if (path === '/api/settings/audit') return json(route, 200, { entries: state.audit });
+    if (path === '/api/settings/password' && method === 'POST') {
+      if (body.current === 'wrong password') {
+        return json(route, 401, {
+          error: 'invalid_credentials',
+          message: 'Your current password is not right.',
+        });
+      }
+      return json(route, 200, state.session);
+    }
 
     if (path === '/api/remote') return json(route, 200, state.remote);
     if (path === '/api/remote/connect' && method === 'POST') {
