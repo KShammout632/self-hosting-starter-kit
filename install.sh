@@ -17,7 +17,7 @@ NODE_VERSION="22.23.3"
 NODE_SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"
 # Ed25519 key that signs releases (base64 DER), from scripts/new-release-key.sh. The agent holds the
 # same value in apps/agent/src/release-key.ts.
-RELEASE_PUBLIC_KEY=""
+RELEASE_PUBLIC_KEY="MCowBQYDK2VwAyEAMaipbJAreKa3ZSIx9zLx3/N4aE7BNaN0k6Hcb5FmKJY="
 REPO="KShammout632/self-hosting-starting-kit"
 HELP_URL="https://github.com/${REPO}/blob/main/docs/troubleshooting.md"
 LOG_FILE="/var/log/selfhost-install.log"
