@@ -16,7 +16,7 @@ Each session updates this file before opening its pull request. Newest entry fir
 | M5a Service updates, snapshots, rollback | Done, `update-gate` passed in CI | `m5a-service-updates` (PR 8) |
 | M5b Kit updates, Settings page, system updates | Done, `kit-update-gate` passed in CI | `m5b-kit-settings` (PR 9) |
 | M5c User guide and troubleshooting docs | Done, docs reviewed and merged by the owner. M5 is closed | `m5c-docs` (PR 10) |
-| M6a Hardening before the security review | Built: signed releases, pinned Node checksum, disk identity check before erasing, uninstall keeps files on drives. Release key made by the owner (public key committed, `RELEASE_SIGNING_KEY` secret set). Needs CI to pass | `m6a-hardening` |
+| M6a Hardening before the security review | Built: signed releases, pinned Node checksum, disk identity check before erasing, uninstall keeps files on drives. Release key made by the owner (public key committed, `RELEASE_SIGNING_KEY` secret set). All CI gates pass, including the changed `storage-gate` and `kit-update-gate` | `m6a-hardening` |
 | M6 Beta to 1.0 | In progress (M6a) | |
 
 ## Next up
@@ -79,6 +79,7 @@ Ideas and follow-ups found during work that are outside the current milestone.
 - Storage: a drive that was unmounted from the dashboard mounts again at the next boot, because its unit stays enabled. There is no "forget this drive" action yet.
 - Storage: services stopped by "Stop apps and unmount" are not started again. Folder changes do restart them.
 - Storage: after a drive comes back, a container that was running keeps its old view of the folder until it is restarted. The card says so ("restart this service"), nothing restarts it automatically.
+- CI: `services-gate` and `update-gate` failed twice on the M6a PR at "Install Immich" with "The action failed." (an unexpected agent error) within half a second, then passed on the next run with no code change. The pinned Immich images were all still available. Both gates now print the agent journal on failure, so the next time it happens the cause will be in the log.
 - Storage: `disk.format` checks a `diskId` made from the serial, WWN, model and size. Two drives with no serial or WWN, of the same model and size, look the same, so swapping one for the other at the same name is not caught. The typed confirmation is still the kernel name (`sdb`); typing the serial instead would be stronger but is harder to read off the drive.
 - Uninstall: when settings are kept, the kit's mount units stay so a new install finds the drives. With the agent gone nothing manages them; they keep mounting at boot until the settings are deleted or the kit is installed again.
 - Storage: no SMART warning is shown on the Home page, only when the owner presses Check health.
