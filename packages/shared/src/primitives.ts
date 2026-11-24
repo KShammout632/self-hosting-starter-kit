@@ -54,11 +54,18 @@ export const folderSubpath = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}(\/[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}){0,3}$/);
 
-export const CONFIRM_KINDS = ['service.uninstall', 'disk.format', 'snapshot.restore'] as const;
+export const CONFIRM_KINDS = [
+  'service.uninstall',
+  'disk.format',
+  'snapshot.restore',
+  'system.reboot',
+] as const;
 export const confirmKind = z.enum(CONFIRM_KINDS);
 export type ConfirmKind = z.infer<typeof confirmKind>;
-// A service name or a device name, checked against the kind by the agent.
+// A service name, a device name, or 'server' for a reboot, checked against the kind by the agent.
 export const confirmTarget = z.string().regex(/^[A-Za-z0-9-]{2,40}$/);
+
+export const REBOOT_TARGET = 'server';
 
 export const confirmToken = z.string().regex(/^[A-Za-z0-9_-]{32,128}$/);
 

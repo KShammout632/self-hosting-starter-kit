@@ -55,12 +55,42 @@ describe('deriveServiceState', () => {
 
 describe('config', () => {
   it('reads flags and environment', () => {
-    expect(parseConfig([], {})).toEqual({ dryRun: false, socketPath: '/run/selfhost/agent.sock' });
+    expect(parseConfig([], {})).toEqual({
+      dryRun: false,
+      socketPath: '/run/selfhost/agent.sock',
+      releaseBase: null,
+    });
     expect(parseConfig(['--dry-run', '--socket', '/tmp/a.sock'], {})).toEqual({
       dryRun: true,
       socketPath: '/tmp/a.sock',
+      releaseBase: null,
     });
     expect(parseConfig([], { SELFHOST_DRY_RUN: '1' }).dryRun).toBe(true);
+  });
+
+  describe('test release address', () => {
+    const base = { SELFHOST_RELEASE_BASE: 'http://127.0.0.1:9000' };
+
+    it('is ignored on a normal agent', () => {
+      expect(parseConfig([], base).releaseBase).toBeNull();
+    });
+
+    it('is used in a dry run or a test build', () => {
+      expect(parseConfig(['--dry-run'], base).releaseBase).toBe('http://127.0.0.1:9000');
+      expect(parseConfig([], base, true).releaseBase).toBe('http://127.0.0.1:9000');
+    });
+
+    it.each([
+      'https://127.0.0.1:9000',
+      'http://localhost:9000',
+      'http://192.168.1.5:9000',
+      'http://127.0.0.1:9000/path',
+      'http://127.0.0.1',
+      'http://127.0.0.1:9000@evil.example',
+      'https://github.com',
+    ])('refuses %s even in a test build', (value) => {
+      expect(parseConfig([], { SELFHOST_RELEASE_BASE: value }, true).releaseBase).toBeNull();
+    });
   });
 
   it('rejects unknown flags', () => {
@@ -153,7 +183,7 @@ describe('dispatcher', () => {
   });
 
   it('returns not_implemented for valid actions without a handler', async () => {
-    const [reply] = await collect(dispatcher()(line({ id: 'a', action: 'system.reboot' })));
+    const [reply] = await collect(dispatcher({})(line({ id: 'a', action: 'agent.version' })));
     expect(reply).toMatchObject({ ok: false, error: { code: 'not_implemented' } });
   });
 

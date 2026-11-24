@@ -12,6 +12,8 @@ mkdir -p "$OUT/dashboard"
 install -m 0644 apps/agent/dist/agent.cjs "$OUT/agent.cjs"
 install -m 0644 deploy/selfhost-agent.service "$OUT/selfhost-agent.service"
 install -m 0644 deploy/selfhost-cli.mjs "$OUT/selfhost-cli.mjs"
+install -m 0755 deploy/apply-update.sh "$OUT/apply-update.sh"
+node -p 'require("./apps/agent/package.json").version' >"$OUT/VERSION"
 install -m 0755 install.sh "$OUT/install.sh"
 install -m 0755 uninstall.sh "$OUT/uninstall.sh"
 

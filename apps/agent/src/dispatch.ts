@@ -1,5 +1,6 @@
 import {
   confirmBinding,
+  EXCLUSIVE_LOCK,
   lockKey as lockKeyFor,
   parseRequest,
   type AgentRequest,
@@ -36,6 +37,12 @@ export function createDispatcher({
 }: DispatchOptions): Dispatch {
   // One mutating action per service at a time, and one disk change at a time.
   const busyServices = new Set<string>();
+
+  // A server-wide change waits for everything else, and everything else waits for it.
+  const isBlocked = (key: string) =>
+    busyServices.has(key) ||
+    busyServices.has(EXCLUSIVE_LOCK) ||
+    (key === EXCLUSIVE_LOCK && busyServices.size > 0);
 
   async function* execute(
     request: AgentRequest,
@@ -78,8 +85,13 @@ export function createDispatcher({
         throw new AgentError('confirm_required', 'The confirmation is invalid or has expired.');
       }
       if (lockKey !== null) {
-        if (busyServices.has(lockKey)) {
-          throw new AgentError('busy', 'Another action is already running for this service.');
+        if (isBlocked(lockKey)) {
+          throw new AgentError(
+            'busy',
+            lockKey === EXCLUSIVE_LOCK || busyServices.has(EXCLUSIVE_LOCK)
+              ? 'The server is busy with an update. Try again in a few minutes.'
+              : 'Another action is already running for this service.',
+          );
         }
         busyServices.add(lockKey);
         holdsLock = true;

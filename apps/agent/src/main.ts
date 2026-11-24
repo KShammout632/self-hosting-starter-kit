@@ -8,8 +8,11 @@ import { DEFAULT_PATHS, dryRunFs, realFs } from './host';
 import { createAgentServer } from './server';
 import { listenOnSocket } from './socket';
 
+declare const __TEST_BUILD__: boolean | undefined;
+
 async function main() {
-  const config = parseConfig(process.argv.slice(2), process.env);
+  const testBuild = typeof __TEST_BUILD__ !== 'undefined' && __TEST_BUILD__;
+  const config = parseConfig(process.argv.slice(2), process.env, testBuild);
 
   const dispatch = createDispatcher({
     handlers,
@@ -22,6 +25,7 @@ async function main() {
       stream: config.dryRun ? dryRunStreamer : streamLines,
       httpCheck: config.dryRun ? dryRunHttpCheck : httpCheck,
       confirmTokens: createConfirmTokens(),
+      ...(config.releaseBase ? { releaseBase: config.releaseBase } : {}),
     },
   });
 

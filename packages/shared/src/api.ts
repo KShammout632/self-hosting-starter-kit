@@ -1,6 +1,7 @@
 import type {
   DiskInfo,
   FolderUsageResult,
+  KitUpdateStatus,
   MissingDrive,
   RemoteTarget,
   ServiceName,
@@ -120,4 +121,40 @@ export interface RemoteSnapshot {
   settingsUrl: string;
   links: RemoteLink[];
   message: string | null;
+}
+
+export interface SettingsJob {
+  state: 'running' | 'failed';
+  message: string | null;
+}
+
+export interface KitSnapshot {
+  // Null while the helper is restarting during an update.
+  currentVersion: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  releaseNotesUrl: string | null;
+  checkedAt: string | null;
+  // True when the last look for a new version could not reach GitHub.
+  checkFailed: boolean;
+  // Preparing the download, before the update script takes over.
+  job: SettingsJob | null;
+  // What the update script reported last. Survives the dashboard restarting.
+  update: KitUpdateStatus | null;
+}
+
+export interface SystemUpdatesSnapshot {
+  packages: number;
+  security: number;
+  rebootRequired: boolean;
+  job: SettingsJob | null;
+}
+
+export interface AuditEntryView {
+  ts: number;
+  actor: string;
+  event: string;
+  target: string | null;
+  outcome: string;
+  detail: string | null;
 }
