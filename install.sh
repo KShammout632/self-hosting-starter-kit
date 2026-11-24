@@ -14,7 +14,7 @@ set -euo pipefail
 KIT_VERSION="0.1.0"
 NODE_VERSION="22.23.3"
 REPO="KShammout632/self-hosting-starting-kit"
-HELP_URL="https://github.com/${REPO}"
+HELP_URL="https://github.com/${REPO}/blob/main/docs/troubleshooting.md"
 LOG_FILE="/var/log/selfhost-install.log"
 
 say() { printf '\n==> %s\n' "$*"; }
@@ -288,6 +288,7 @@ finish() {
   cat <<EOF
 Put your movies in /srv/media/movies, shows in /srv/media/tv.
 The install log is saved at ${LOG_FILE}.
+Guides and troubleshooting: ${HELP_URL%/troubleshooting.md}/user-guide.md
 To remove everything later: sudo bash /opt/selfhost/uninstall.sh
 EOF
 }
