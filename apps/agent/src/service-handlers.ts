@@ -50,9 +50,11 @@ async function* followLogs(
 
 const SAFE_TIMEZONE = /^[A-Za-z0-9_/+-]{1,64}$/;
 const SERVICE_USER = 'selfhost';
-const MINUTES = 60_000;
+export const MINUTES = 60_000;
 
-const composeFile = (deps: Deps, service: ServiceName) =>
+export const versionFile = (deps: Deps, service: ServiceName) =>
+  `${deps.paths.servicesDir}/${service}/version`;
+export const composeFile = (deps: Deps, service: ServiceName) =>
   `${deps.paths.servicesDir}/${service}/compose.yml`;
 
 function timezone(): string {
@@ -117,19 +119,19 @@ async function serviceUserId(deps: Deps, flag: '-u' | '-g'): Promise<number> {
   return value;
 }
 
-function requireManifest(service: ServiceName): ServiceManifest {
+export function requireManifest(service: ServiceName): ServiceManifest {
   const manifest = getManifest(service);
   if (!manifest) throw new AgentError('not_implemented', 'This service is not available yet.');
   return manifest;
 }
 
-async function requireInstalled(deps: Deps, service: ServiceName): Promise<void> {
+export async function requireInstalled(deps: Deps, service: ServiceName): Promise<void> {
   if (!(await deps.fs.exists(composeFile(deps, service)))) {
     throw new AgentError('not_installed', 'This service is not installed yet.');
   }
 }
 
-async function compose(
+export async function compose(
   deps: Deps,
   service: ServiceName,
   args: readonly string[],
@@ -158,7 +160,7 @@ async function compose(
 
 // Renders the compose file from the manifest pin and writes it, along with the config folders the
 // container needs. Safe to run again: this is also how an update picks up a new pinned version.
-async function writeService(deps: Deps, manifest: ServiceManifest): Promise<void> {
+export async function writeService(deps: Deps, manifest: ServiceManifest): Promise<void> {
   const uid = await serviceUserId(deps, '-u');
   const gid = await serviceUserId(deps, '-g');
   const configDir = `${deps.paths.configDir}/${manifest.name}`;
@@ -192,6 +194,12 @@ async function writeService(deps: Deps, manifest: ServiceManifest): Promise<void
   }
   await deps.fs.ensureDir(`${deps.paths.servicesDir}/${manifest.name}`);
   await deps.fs.writeFile(composeFile(deps, manifest.name), rendered, 0o644);
+  await deps.fs.writeFile(
+    versionFile(deps, manifest.name),
+    `${manifest.version}
+`,
+    0o644,
+  );
 }
 
 export const serviceHandlers: Handlers = {
@@ -244,16 +252,6 @@ export const serviceHandlers: Handlers = {
   async 'service.restart'(request, deps) {
     await requireInstalled(deps, request.service);
     await compose(deps, request.service, ['restart'], { timeoutMs: 5 * MINUTES });
-    return { data: {} };
-  },
-
-  // Moves to whatever version this kit release pins. Snapshots and rollback arrive in M5.
-  async 'service.update'(request, deps) {
-    const manifest = requireManifest(request.service);
-    await requireInstalled(deps, request.service);
-    await writeService(deps, manifest);
-    await compose(deps, request.service, ['pull'], { timeoutMs: 20 * MINUTES });
-    await compose(deps, request.service, ['up', '--detach'], { timeoutMs: 5 * MINUTES });
     return { data: {} };
   },
 

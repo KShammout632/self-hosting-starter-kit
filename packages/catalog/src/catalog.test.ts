@@ -30,6 +30,13 @@ describe('catalog', () => {
     for (const manifest of catalog) expect(serviceManifest.safeParse(manifest).success).toBe(true);
   });
 
+  it('pins every image by digest, and shows an owner-friendly version', () => {
+    for (const manifest of catalog) {
+      expect(manifest.version.length).toBeGreaterThan(0);
+      for (const image of manifest.images) expect(image.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    }
+  });
+
   it('rejects floating image tags', () => {
     const jellyfin = getManifest('jellyfin')!;
     const floating = { ...jellyfin, images: [{ ...jellyfin.images[0]!, tag: 'latest' }] };
@@ -45,7 +52,7 @@ describe('jellyfin template', () => {
   it('renders valid compose YAML from the manifest pin', () => {
     const compose = parse(renderTemplate(template, { ...vars, GPU: false }));
     const service = compose.services.jellyfin;
-    expect(service.image).toBe('jellyfin/jellyfin:12.4');
+    expect(service.image).toMatch(/^jellyfin\/jellyfin:12\.4@sha256:[a-f0-9]{64}$/);
     expect(service.user).toBe('1001:1001');
     expect(service.ports).toEqual(['8096:8096']);
     expect(service.devices).toBeUndefined();

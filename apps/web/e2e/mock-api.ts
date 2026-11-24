@@ -82,6 +82,8 @@ export const jellyfin = (overrides: Partial<ServiceSummary> = {}): ServiceSummar
   errorCount: 0,
   hints: [],
   credentialsPending: false,
+  update: null,
+  notice: null,
   ...overrides,
 });
 

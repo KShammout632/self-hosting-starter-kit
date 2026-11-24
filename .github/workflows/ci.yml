@@ -153,6 +153,27 @@ jobs:
       - name: Install Navidrome, Immich and Nextcloud and use them
         run: sudo bash /tmp/bundle/m4a-gate-inner.sh /tmp/bundle
 
+  # M5a gate: moves Navidrome from an older release to the pinned one (account kept, private saved
+  # copy made, only the newest three kept), then makes an Immich update look unhealthy and checks the
+  # agent puts the old version and its database back.
+  update-gate:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: bash scripts/make-bundle.sh /tmp/bundle
+      - run: cp test/vm/m5a-gate-inner.sh test/vm/agent-call.mjs /tmp/bundle/
+      - name: Update a service, then roll one back
+        run: sudo bash /tmp/bundle/m5a-gate-inner.sh /tmp/bundle
+
   # M4b gate: the Tailscale actions. The sign-in checks need only internet access. The tailnet checks
   # (publish addresses, fetch them over https, Nextcloud trusted domains) run when the repository has
   # a TS_AUTHKEY secret: an ephemeral, reusable auth key from a throwaway tailnet with MagicDNS and

@@ -37,12 +37,17 @@ export function renderTemplate(template: string, vars: TemplateVars): string {
   return rendered;
 }
 
+// The image reference for one container, for example repo:tag@sha256:...
+export function imageRef(image: ServiceManifest['images'][number]): string {
+  return `${image.repository}:${image.tag}${image.digest ? `@${image.digest}` : ''}`;
+}
+
 // Maps each container to an IMAGE_<NAME> variable so the manifest is the only place pins live.
 export function imageVars(manifest: ServiceManifest): TemplateVars {
   return Object.fromEntries(
     manifest.images.map((image) => [
       `IMAGE_${image.container.toUpperCase().replaceAll('-', '_')}`,
-      `${image.repository}:${image.tag}`,
+      imageRef(image),
     ]),
   );
 }

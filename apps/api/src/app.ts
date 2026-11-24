@@ -21,7 +21,7 @@ import { registerRemoteRoutes } from './remote-routes';
 import { registerStorageRoutes } from './storage-routes';
 
 const COOKIE = 'selfhost_session';
-const ACTION_TIMEOUT_MS = 25 * 60_000;
+const ACTION_TIMEOUT_MS = 45 * 60_000;
 
 export interface AppDeps {
   agent: AgentClient;
@@ -73,6 +73,8 @@ export function describeAgentError(error: unknown): string {
         return 'This service is not installed yet.';
       case 'not_implemented':
         return 'This service is not available yet.';
+      case 'rolled_back':
+        return 'The update did not work, so the service was put back the way it was. Nothing was lost.';
       case 'refused':
         return 'That was already shown once and cannot be shown again.';
       case 'unreachable':
@@ -332,7 +334,11 @@ export async function buildApp(deps: AppDeps) {
             outcome: 'failed',
             detail: error instanceof AgentRequestError ? error.code : 'error',
           });
-          await monitor.endAction(service, describeAgentError(error));
+          if (error instanceof AgentRequestError && error.code === 'rolled_back') {
+            await monitor.endAction(service, undefined, describeAgentError(error));
+          } else {
+            await monitor.endAction(service, describeAgentError(error));
+          }
         }
       })();
       return reply.code(202).send({ started: true });

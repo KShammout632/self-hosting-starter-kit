@@ -4,6 +4,7 @@ import {
   isErrorLine,
   type BusyAction,
   type ServiceName,
+  type ServiceUpdateInfo,
   type ServiceStatusResult,
   type ServiceSummary,
   type StatusSnapshot,
@@ -29,7 +30,7 @@ export interface StatusMonitor {
   refresh(service?: ServiceName): Promise<void>;
   subscribe(listener: (snapshot: StatusSnapshot) => void): () => void;
   beginAction(service: ServiceName, action: BusyAction): boolean;
-  endAction(service: ServiceName, failure?: string): Promise<void>;
+  endAction(service: ServiceName, failure?: string, notice?: string): Promise<void>;
   isAvailable(service: ServiceName): boolean;
 }
 
@@ -41,6 +42,8 @@ interface ServiceState {
   errorCount: number;
   hints: string[];
   credentialsPending: boolean;
+  update: ServiceUpdateInfo | null;
+  notice: string | null;
   logScanAt: number;
 }
 
@@ -60,6 +63,8 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         errorCount: 0,
         hints: [],
         credentialsPending: false,
+        update: null,
+        notice: null,
         logScanAt: 0,
       },
     ]),
@@ -89,6 +94,8 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         errorCount: state.errorCount,
         hints: state.hints,
         credentialsPending: state.credentialsPending,
+        update: state.update,
+        notice: state.notice,
       };
     }),
   });
@@ -141,6 +148,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
       state.status = computed.status;
       state.message = computed.message;
       state.credentialsPending = result.credentialsPending;
+      state.update = result.update ?? null;
       if (result.state === 'not_found') {
         state.errorCount = 0;
         state.hints = [];
@@ -214,15 +222,17 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
       if (!state || state.busy) return false;
       state.busy = action;
       state.lastFailure = null;
+      state.notice = null;
       publish();
       return true;
     },
 
-    async endAction(service, failure) {
+    async endAction(service, failure, notice) {
       const state = states.get(service);
       if (!state) return;
       state.busy = null;
       state.lastFailure = failure ?? null;
+      state.notice = notice ?? null;
       state.logScanAt = 0;
       await refresh(service);
     },

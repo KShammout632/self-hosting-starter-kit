@@ -172,11 +172,20 @@ test.describe('service page', () => {
   });
 
   test('restart, update and stop send the matching requests', async ({ page }) => {
-    const state = newState();
+    const state = newState({
+      service: jellyfin({
+        update: {
+          available: true,
+          installedVersion: '12.3',
+          newVersion: '12.4',
+          releaseNotesUrl: 'https://github.com/jellyfin/jellyfin/releases',
+        },
+      }),
+    });
     await mockApi(page, state);
     await page.goto('/services/jellyfin');
     await page.getByRole('button', { name: 'Restart' }).click();
-    await page.getByRole('button', { name: 'Update' }).click();
+    await page.getByRole('button', { name: 'Update now' }).click();
     await page.getByRole('button', { name: 'Stop' }).click();
     await expect
       .poll(() => state.requests.map((r) => r.path))
@@ -185,6 +194,32 @@ test.describe('service page', () => {
         '/api/services/jellyfin/update',
         '/api/services/jellyfin/stop',
       ]);
+  });
+
+  test('offers an update only when one is available, and explains a rollback', async ({ page }) => {
+    const state = newState();
+    await mockApi(page, state);
+    await page.goto('/services/jellyfin');
+    await expect(page.getByRole('button', { name: 'Update now' })).toHaveCount(0);
+
+    state.service = jellyfin({
+      update: {
+        available: true,
+        installedVersion: '12.3',
+        newVersion: '12.4',
+        releaseNotesUrl: 'https://github.com/jellyfin/jellyfin/releases',
+      },
+    });
+    await page.goto('/services/jellyfin');
+    await expect(page.getByLabel('Update available')).toContainText('You have version 12.3');
+    await expect(page.getByRole('link', { name: 'What is new' })).toHaveAttribute(
+      'href',
+      'https://github.com/jellyfin/jellyfin/releases',
+    );
+
+    state.service = jellyfin({ notice: 'The update did not work, so the service was put back.' });
+    await page.goto('/services/jellyfin');
+    await expect(page.getByRole('status')).toContainText('put back');
   });
 
   test('removing keeps your data unless you tick the box and type the name', async ({ page }) => {

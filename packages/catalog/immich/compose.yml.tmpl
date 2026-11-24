@@ -22,7 +22,7 @@ services:
       - database
 
   immich-machine-learning:
-    image: {{IMAGE_IMMICH_MACHINE_LEARNING}}{{GPU_IMAGE_SUFFIX}}
+    image: {{IMAGE_IMMICH_MACHINE_LEARNING}}
     container_name: selfhost-immich-machine-learning
     restart: unless-stopped
     user: "{{PUID}}:{{PGID}}"
@@ -32,12 +32,6 @@ services:
       MACHINE_LEARNING_MODEL_REVISION: v2
     volumes:
       - {{CONFIG_DIR}}/ml-cache:/cache
-{{#if GPU}}
-    devices:
-      - /dev/dri:/dev/dri
-    group_add:
-      - "{{RENDER_GID}}"
-{{/if}}
 
   redis:
     image: {{IMAGE_REDIS}}

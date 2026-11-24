@@ -11,6 +11,7 @@ import { parseComposeLogs } from './logs';
 const paths: Paths = {
   servicesDir: '/opt/selfhost/services',
   configDir: '/opt/selfhost/config',
+  backupsDir: '/opt/selfhost/backups',
   renderDevice: '/dev/dri/renderD128',
   unitDir: '/etc/systemd/system',
   mountRoot: '/mnt',
@@ -65,6 +66,7 @@ function makeHost(
     commands.push([file, ...args]);
     if (file === 'id') return args[0] === '-u' ? '1001\n' : '1002\n';
     if (file === 'docker') return options.docker?.(args) ?? '';
+    if (file === 'tar') return '';
     throw new Error(`unexpected command ${file}`);
   };
 
@@ -77,6 +79,7 @@ function makeHost(
     stream: dryRunStreamer,
     httpCheck: async () => true,
     confirmTokens: createConfirmTokens(),
+    timing: { pollMs: 1, healthTimeoutMs: 20 },
   };
   return { deps, files, dirs, removed, commands, modes, owned };
 }
@@ -87,6 +90,12 @@ async function ask(deps: Deps, request: Record<string, unknown>): Promise<AgentR
   for await (const message of dispatch(JSON.stringify({ id: 'r1', ...request }))) out.push(message);
   return out;
 }
+
+const runningDocker: Deps['docker'] = {
+  listServiceContainers: async () => [
+    { name: 'selfhost-test', state: 'running', health: null, startedAt: null },
+  ],
+};
 
 const install = (deps: Deps) => ask(deps, { action: 'service.install', service: 'jellyfin' });
 const dockerCommands = (commands: (readonly string[])[]) =>
@@ -102,7 +111,7 @@ describe('Navidrome, Immich and Nextcloud', () => {
     const host = makeHost();
     expect(await installService(host.deps, 'navidrome')).toMatchObject([{ ok: true }]);
     const service = composeOf(host, 'navidrome').services.navidrome;
-    expect(service.image).toBe('deluan/navidrome:0.64.2');
+    expect(service.image).toMatch(/^deluan\/navidrome:0\.64\.2@sha256:[a-f0-9]{64}$/);
     expect(service.ports).toEqual(['4533:4533']);
     expect(service.volumes).toContain('/srv/media/music:/music:ro');
   });
@@ -128,22 +137,23 @@ describe('Navidrome, Immich and Nextcloud', () => {
     expect(services.database.volumes).toEqual([
       '/opt/selfhost/config/immich/db:/var/lib/postgresql/data',
     ]);
-    expect(services['immich-machine-learning'].image).toBe(
-      'ghcr.io/immich-app/immich-machine-learning:v3.4.2',
+    expect(services['immich-machine-learning'].image).toMatch(
+      /^ghcr\.io\/immich-app\/immich-machine-learning:v3\.4\.2@sha256:[a-f0-9]{64}$/,
     );
   });
 
-  it('uses the OpenVINO build of machine learning only with an Intel GPU', async () => {
+  it('runs machine learning on the CPU even when an Intel GPU is present', async () => {
     const host = makeHost({ renderGid: 105 });
     await installService(host.deps, 'immich');
     const ml = composeOf(host, 'immich').services['immich-machine-learning'];
-    expect(ml.image).toBe('ghcr.io/immich-app/immich-machine-learning:v3.4.2-openvino');
-    expect(ml.devices).toEqual(['/dev/dri:/dev/dri']);
+    expect(ml.image).toMatch(/immich-machine-learning:v3\.4\.2@sha256:/);
+    expect(ml.devices).toBeUndefined();
     expect(ml.mem_limit).toBe('3g');
   });
 
   it('keeps the same secrets when a service is updated or installed again', async () => {
     const host = makeHost();
+    host.deps.docker = runningDocker;
     await installService(host.deps, 'immich');
     const first = host.files.get('/opt/selfhost/config/immich/.env');
     await ask(host.deps, { action: 'service.update', service: 'immich' });
@@ -157,7 +167,7 @@ describe('Navidrome, Immich and Nextcloud', () => {
     const { services } = composeOf(host, 'nextcloud');
     expect(Object.keys(services).sort()).toEqual(['app', 'cron', 'database', 'redis']);
     expect(services.app.ports).toEqual(['8081:80']);
-    expect(services.app.image).toBe('nextcloud:35.0.3-apache');
+    expect(services.app.image).toMatch(/^nextcloud:35\.0\.3-apache@sha256:[a-f0-9]{64}$/);
     expect(services.cron.entrypoint).toBe('/cron.sh');
     expect(services.app.environment.NEXTCLOUD_TRUSTED_DOMAINS).toContain('localhost');
     expect(services.app.volumes).toContain('/srv/nextcloud:/var/www/html/data');
@@ -233,7 +243,9 @@ describe('service.install', () => {
     expect(await install(host.deps)).toMatchObject([{ ok: true }]);
 
     const compose = parse(host.files.get(COMPOSE)!);
-    expect(compose.services.jellyfin.image).toBe('jellyfin/jellyfin:12.4');
+    expect(compose.services.jellyfin.image).toMatch(
+      /^jellyfin\/jellyfin:12\.4@sha256:[a-f0-9]{64}$/,
+    );
     expect(compose.services.jellyfin.user).toBe('1001:1002');
     expect(compose.services.jellyfin.devices).toBeUndefined();
 
@@ -313,6 +325,7 @@ describe('start, stop and restart', () => {
 describe('service.update', () => {
   it('re-renders from the pinned version, pulls, then recreates', async () => {
     const host = makeHost();
+    host.deps.docker = runningDocker;
     await install(host.deps);
     host.files.set(COMPOSE, 'stale: true\n');
     host.commands.length = 0;
@@ -320,8 +333,10 @@ describe('service.update', () => {
     expect(await ask(host.deps, { action: 'service.update', service: 'jellyfin' })).toMatchObject([
       { ok: true },
     ]);
-    expect(parse(host.files.get(COMPOSE)!).services.jellyfin.image).toBe('jellyfin/jellyfin:12.4');
-    expect(dockerCommands(host.commands)).toEqual(['pull', 'up --detach']);
+    expect(parse(host.files.get(COMPOSE)!).services.jellyfin.image).toMatch(
+      /^jellyfin\/jellyfin:12\.4@sha256:/,
+    );
+    expect(dockerCommands(host.commands)).toEqual(['stop', 'pull', 'up --detach']);
   });
 
   it('refuses a service that is not installed', async () => {

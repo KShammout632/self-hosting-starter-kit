@@ -14,6 +14,7 @@ export const ERROR_CODES = [
   'not_found',
   'in_use',
   'refused',
+  'rolled_back',
   'failed',
 ] as const;
 export const errorCode = z.enum(ERROR_CODES);

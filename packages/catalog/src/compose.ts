@@ -25,7 +25,6 @@ export function renderCompose(manifest: ServiceManifest, context: ComposeContext
     LAN_PORT: manifest.ports.lan,
     CONFIG_DIR: context.configDir,
     GPU: gpu,
-    GPU_IMAGE_SUFFIX: gpu ? (manifest.gpu.imageSuffix ?? '') : '',
     TRUSTED_DOMAINS: context.trustedDomains.join(' '),
   };
   if (gpu) vars.RENDER_GID = context.renderGid!;

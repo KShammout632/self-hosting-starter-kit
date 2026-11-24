@@ -92,6 +92,7 @@ const DRY_RUN_FIXTURES: Record<string, string> = {
   udevadm: '',
   'mkfs.ext4': '',
   rsync: '',
+  tar: '',
 };
 
 export const dryRunRunner: Runner = async (file, args) => {

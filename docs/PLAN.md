@@ -296,7 +296,7 @@ Each service is an independent Compose project with pinned image versions, its c
 - Generate the compose file from Immich's official release compose and `.env`, pinned to a tested version. Immich ships breaking changes often, so updates only move to versions the kit has tested
 - Generate a random `DB_PASSWORD` at install time and store it in `/opt/selfhost/config/immich/.env` (mode 0600)
 - Postgres data lives on the system SSD (`/opt/selfhost/config/immich/db`), never on a USB or network drive
-- Enable Intel OpenVINO for the machine-learning container when the GPU is present
+- Machine learning runs on the CPU in v1. The Intel OpenVINO build is left out because upstream has not published it for the pinned release (revisit at M6 hardware testing)
 - Health check: `GET /api/server/ping`
 
 **Nextcloud**
@@ -430,7 +430,7 @@ Build a thin, working slice first (installer plus Jellyfin), then add the dashbo
 | M2 Dashboard core | Login, setup code, service cards with live status; service detail page, live logs over SSE, error hints | Start, stop and read logs from the browser only |
 | M3 Storage | Disk list, mount by UUID, format ext4, folder mapping; SMART health, free space warnings, safe unplug | USB unplug and reboot test passes |
 | M4 All services, wizard, remote access | Built in three sub-milestones. M4a: Navidrome, Immich and Nextcloud catalog entries. M4b: Tailscale login, tailscale serve, QR codes. M4c: setup wizard | All four apps work on a phone over mobile data (closes after M4c) |
-| M5 Updates and docs | Kit and service updates with health-check rollback; pre-update snapshots, user guide and troubleshooting docs | Upgrade test passes and docs reviewed |
+| M5 Updates and docs | Built in three sub-milestones. M5a: service updates with pre-update snapshots and health-check rollback. M5b: kit updates, system updates, Settings page, release workflow. M5c: user guide and troubleshooting docs | Upgrade test passes and docs reviewed (closes after M5c) |
 | M6 Beta to 1.0 | Mini PC hardware testing, security review of the agent; public beta, fix feedback, tag 1.0 | 1.0 released |
 
 Each phase builds on the previous one, starting from a working Jellyfin install.

@@ -39,7 +39,8 @@ export const BUSY_LABEL: Record<NonNullable<ServiceSummary['busy']>, string> = {
   starting: 'Starting',
   stopping: 'Stopping',
   restarting: 'Restarting',
-  updating: 'Updating',
+  updating:
+    'Saving a copy of your data, then updating. If something goes wrong, it is put back. This can take a few minutes.',
   removing: 'Removing',
 };
 

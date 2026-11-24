@@ -4,6 +4,7 @@ import type {
   MissingDrive,
   RemoteTarget,
   ServiceName,
+  ServiceUpdateInfo,
   SystemInfoResult,
 } from './index';
 
@@ -35,6 +36,10 @@ export interface ServiceSummary {
   firstLoginTips: string[];
   // True until the owner has been shown the one-time login details (Nextcloud's admin password).
   credentialsPending: boolean;
+  // Null while the service is not installed.
+  update: ServiceUpdateInfo | null;
+  // Something the owner should know that is not a failure, such as an update that was rolled back.
+  notice: string | null;
   status: ServiceStatus;
   // A plain-English reason shown when the status needs explaining.
   message: string | null;

@@ -68,7 +68,11 @@ export const agentRequest = z.discriminatedUnion('action', [
   action('system.updates.apply', {}),
 
   action('snapshot.create', service),
-  action('snapshot.restore', { ...service, snapshot: snapshotId }),
+  action('snapshot.restore', {
+    ...service,
+    snapshot: snapshotId,
+    confirm: confirmToken.optional(),
+  }),
 
   action('confirm.issue', { kind: confirmKind, target: confirmTarget }),
 
@@ -133,6 +137,9 @@ export function confirmBinding(request: AgentRequest): ConfirmBinding | null {
   if (request.action === 'disk.format') return { kind: 'disk.format', target: request.device };
   if (request.action === 'service.uninstall' && request.deleteData) {
     return { kind: 'service.uninstall', target: request.service };
+  }
+  if (request.action === 'snapshot.restore') {
+    return { kind: 'snapshot.restore', target: request.service };
   }
   return null;
 }
