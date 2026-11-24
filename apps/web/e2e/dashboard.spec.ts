@@ -129,6 +129,19 @@ test.describe('home', () => {
     await expect(page.getByText('systemctl status selfhost-agent')).toBeVisible();
   });
 
+  test('links to the user guide and troubleshooting page', async ({ page }) => {
+    await mockApi(page, newState());
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: 'User guide' })).toHaveAttribute(
+      'href',
+      /docs\/user-guide\.md$/,
+    );
+    await expect(page.getByRole('link', { name: 'Troubleshooting' })).toHaveAttribute(
+      'href',
+      /docs\/troubleshooting\.md$/,
+    );
+  });
+
   test('stays inside the screen on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await mockApi(page, newState());

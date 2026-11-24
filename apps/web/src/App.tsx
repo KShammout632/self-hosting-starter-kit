@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { DOCS } from '@/lib/docs';
 import { SESSION_KEY, useSession } from '@/lib/session';
 import { useStatus, useStatusStream } from '@/lib/status';
 import { kitIsBusy, useKit, useSystemUpdates } from '@/lib/use-settings';
@@ -112,6 +113,15 @@ function Layout() {
       <main>
         <Outlet />
       </main>
+      <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-4 text-sm text-muted-foreground">
+        <span>Need help?</span>
+        <a className="underline" href={DOCS.userGuide} target="_blank" rel="noreferrer">
+          User guide
+        </a>
+        <a className="underline" href={DOCS.troubleshooting} target="_blank" rel="noreferrer">
+          Troubleshooting
+        </a>
+      </footer>
     </div>
   );
 }
