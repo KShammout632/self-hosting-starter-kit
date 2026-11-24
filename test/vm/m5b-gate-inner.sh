@@ -56,7 +56,8 @@ printf '[Service]\nEnvironment=SELFHOST_RELEASE_BASE=http://127.0.0.1:%s\n' "$PO
   >/etc/systemd/system/selfhost-agent.service.d/test-release.conf
 systemctl daemon-reload
 systemctl restart selfhost-agent
-wait_for 20 "the agent" test "$(agent_version)" = "$OLD"
+agent_is_old() { [ "$(agent_version)" = "$OLD" ]; }
+wait_for 20 "the agent" agent_is_old
 
 step "Make the release variants"
 NAME="selfhost-kit-$NEW-linux-x64.tar.gz"
