@@ -69,13 +69,39 @@ The installer always says why in plain English and ends with "More help". The fu
 | Needs Ubuntu Server 24.04 | The kit supports only that version. Install it and try again. |
 | Needs a 64-bit Intel or AMD processor | ARM boards (such as a Raspberry Pi) are not supported. |
 | Less than 4 GB of memory | That is the minimum. Add memory or use another machine. |
-| The system disk needs at least 20 GB free | Free space on the main drive. |
+| The system disk needs at least 20 GB free | Free space on the main drive. On a new Ubuntu install the space is often there but not in use, see [below](#the-system-disk-needs-at-least-20-gb-free). |
 | Cannot reach the internet | Check the cable or Wi-Fi and the router, then try again. |
 | Please run it with sudo | Start it with `sudo bash install.sh`. |
+| The download is not signed by this project | The download did not come from this project, so nothing was installed. Download `install.sh` again from the address in the [user guide](user-guide.md) and try again. |
 | The download is corrupt | Try again. If it keeps happening, the download is being altered on your network. |
 | The dashboard did not start | The installer printed the dashboard's log just above the message. Read it, or ask for help. |
 
 The installer is safe to run again, and running it a second time repairs most half-finished installs.
+
+### The system disk needs at least 20 GB free
+
+With its standard settings, the Ubuntu Server installer often uses only part of the disk for the system and leaves the rest unused. Check how much space the system has, and whether there is unused space next to it:
+
+```bash
+df -h /
+sudo vgs
+```
+
+If `sudo vgs` shows space under `VFree`, give all of it to the system. This is safe while the server is running:
+
+```bash
+sudo lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+```
+
+If `VFree` is 0, the disk itself is too small. On a virtual machine, shut it down, make its virtual disk bigger in the virtual machine program (40 GB or more if you will use Immich and Nextcloud), start it again and run the commands below. Check the disk and partition names with `lsblk` first: they are usually `sda` and `3`, but can be different, for example `vda`.
+
+```bash
+sudo growpart /dev/sda 3
+sudo pvresize /dev/sda3
+sudo lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+```
+
+Then run `sudo bash install.sh` again.
 
 ## What the card statuses mean
 

@@ -86,11 +86,16 @@ Each app keeps its own accounts. The dashboard password does not work inside the
 Address: `http://<server address>:8096`
 
 1. Open Jellyfin and create your admin account.
-2. Add your libraries. Jellyfin sees your folders under `/media`:
-   - Movies: `/media/movies`
-   - Shows: `/media/tv`
-   - Home videos: `/media/home-videos`
-3. Put files in the matching folders on the server (see the [folders](#where-your-files-go) below).
+2. Add your libraries: in Jellyfin, go to **Dashboard**, then **Libraries**, then **Add Media Library**. Choose the content type, give the library a name, press **+** under **Folders** and enter the folder as Jellyfin sees it:
+
+   | Library | Content type | Folder in Jellyfin |
+   | --- | --- | --- |
+   | Movies | Movies | `/media/movies` |
+   | Shows | Shows | `/media/tv` |
+   | Home videos | Home Videos and Photos | `/media/home-videos` |
+
+   Jellyfin cannot see `/srv`, so always use these `/media` names inside Jellyfin.
+3. Put files in the matching folders on the server (see the [folders](#where-your-files-go) below). Jellyfin looks for new files on its own from time to time. To see a new file straight away, go to **Dashboard**, then **Libraries**, and choose **Scan All Libraries**.
 
 Phone and TV apps: Jellyfin, Findroid, Swiftfin. If the server has an Intel graphics chip, Jellyfin can use it to convert video for slow connections.
 
@@ -136,6 +141,16 @@ sudo usermod -aG selfhost $USER
 ```
 
 Only do this for the account you already use with `sudo`. Members of the `selfhost` group can also give orders to the server's helper program (install and remove apps, erase drives), so never add an account for someone who should not manage the server.
+
+For example, to copy a home video from a Windows computer, open PowerShell and run this, with your own file, Ubuntu user name and server address:
+
+```powershell
+scp "C:\Users\you\Videos\birthday.mp4" youruser@192.168.1.50:/srv/media/home-videos/
+```
+
+In WinSCP or FileZilla, connect with SFTP to the server's address with your Ubuntu user name and password, and drag files into the folder.
+
+If you moved a folder to a drive on the **Storage** page, keep copying into the same `/srv` folder: it leads to the drive.
 
 | Folder | Used by |
 | --- | --- |
