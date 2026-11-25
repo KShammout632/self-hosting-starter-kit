@@ -214,9 +214,9 @@ describe('kit.update', () => {
 
     const curls = host.commands.filter((c) => c.file === 'curl');
     expect(curls.map((c) => c.args.at(-1))).toEqual([
-      `https://github.com/KShammout632/self-hosting-starting-kit/releases/download/v${NEXT}/${TARBALL}`,
-      `https://github.com/KShammout632/self-hosting-starting-kit/releases/download/v${NEXT}/${TARBALL}.sha256`,
-      `https://github.com/KShammout632/self-hosting-starting-kit/releases/download/v${NEXT}/${TARBALL}.sha256.sig`,
+      `https://github.com/KShammout632/self-hosting-starter-kit/releases/download/v${NEXT}/${TARBALL}`,
+      `https://github.com/KShammout632/self-hosting-starter-kit/releases/download/v${NEXT}/${TARBALL}.sha256`,
+      `https://github.com/KShammout632/self-hosting-starter-kit/releases/download/v${NEXT}/${TARBALL}.sha256.sig`,
     ]);
     expect(curls[0]!.args).toEqual(expect.arrayContaining(['--proto', '=https']));
 

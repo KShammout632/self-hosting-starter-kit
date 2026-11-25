@@ -11,7 +11,7 @@ import { AgentError } from './errors';
 import { RELEASE_PUBLIC_KEY, signatureMatches } from './release-key';
 import type { Deps, Handlers } from './handlers';
 
-export const RELEASE_REPO = 'KShammout632/self-hosting-starting-kit';
+export const RELEASE_REPO = 'KShammout632/self-hosting-starter-kit';
 const RELEASES_DIR = '/opt/selfhost/releases';
 const REBOOT_REQUIRED_FILE = '/var/run/reboot-required';
 const UPDATE_UNIT = 'selfhost-kit-update';

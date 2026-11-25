@@ -4,7 +4,7 @@ import { version } from '../../../agent/package.json';
 // at that version's tag, not as they are on main today.
 export const KIT_VERSION = version;
 
-const DOCS_BASE = `https://github.com/KShammout632/self-hosting-starting-kit/blob/v${KIT_VERSION}/docs`;
+const DOCS_BASE = `https://github.com/KShammout632/self-hosting-starter-kit/blob/v${KIT_VERSION}/docs`;
 
 export const DOCS = {
   userGuide: `${DOCS_BASE}/user-guide.md`,

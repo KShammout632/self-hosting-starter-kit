@@ -2,7 +2,7 @@
 # Self-hosting starter kit installer for Ubuntu Server 24.04 (x86-64).
 # Safe to run again: running it a second time repairs a broken install.
 #
-#   curl -fsSL https://raw.githubusercontent.com/KShammout632/self-hosting-starting-kit/main/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/KShammout632/self-hosting-starter-kit/main/install.sh -o install.sh
 #   less install.sh   # optional: read it first
 #   sudo bash install.sh
 #
@@ -18,7 +18,7 @@ NODE_SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"
 # Ed25519 key that signs releases (base64 DER), from scripts/new-release-key.sh. The agent holds the
 # same value in apps/agent/src/release-key.ts.
 RELEASE_PUBLIC_KEY="MCowBQYDK2VwAyEAMaipbJAreKa3ZSIx9zLx3/N4aE7BNaN0k6Hcb5FmKJY="
-REPO="KShammout632/self-hosting-starting-kit"
+REPO="KShammout632/self-hosting-starter-kit"
 HELP_URL="https://github.com/${REPO}/blob/v${KIT_VERSION}/docs/troubleshooting.md"
 LOG_FILE="/var/log/selfhost-install.log"
 STATE_DIR=/var/lib/selfhost
