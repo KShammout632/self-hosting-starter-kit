@@ -42,6 +42,8 @@ export interface ServiceSummary {
   // Something the owner should know that is not a failure, such as an update that was rolled back.
   notice: string | null;
   status: ServiceStatus;
+  // Separate from status because a failed install also shows as an error with nothing installed.
+  installed: boolean;
   // A plain-English reason shown when the status needs explaining.
   message: string | null;
   busy: BusyAction | null;

@@ -84,6 +84,7 @@ export const jellyfin = (overrides: Partial<ServiceSummary> = {}): ServiceSummar
   lanPort: 8096,
   firstLoginTips: ['Open Jellyfin and create your admin account.'],
   status: 'online',
+  installed: true,
   message: null,
   busy: null,
   errorCount: 0,
@@ -216,12 +217,12 @@ const events = (route: Route, chunks: [string, unknown][]) =>
   });
 
 const NEXT_STATUS: Record<string, Partial<ServiceSummary>> = {
-  install: { status: 'online' },
+  install: { status: 'online', installed: true },
   start: { status: 'online' },
   stop: { status: 'offline' },
   restart: { status: 'online' },
   update: { status: 'online' },
-  uninstall: { status: 'not_installed' },
+  uninstall: { status: 'not_installed', installed: false },
 };
 
 // Stands in for the whole dashboard API, so UI tests need no server.

@@ -80,7 +80,7 @@ test.describe('home', () => {
   });
 
   test('install, stop and start from the card', async ({ page }) => {
-    const state = newState({ service: jellyfin({ status: 'not_installed' }) });
+    const state = newState({ service: jellyfin({ status: 'not_installed', installed: false }) });
     await mockApi(page, state);
     await page.goto('/');
 
@@ -102,7 +102,9 @@ test.describe('home', () => {
   });
 
   test('shows progress while busy and a plain-English reason for errors', async ({ page }) => {
-    const state = newState({ service: jellyfin({ status: 'not_installed', busy: 'installing' }) });
+    const state = newState({
+      service: jellyfin({ status: 'not_installed', installed: false, busy: 'installing' }),
+    });
     await mockApi(page, state);
     await page.goto('/');
     await expect(page.getByRole('status')).toContainText('Installing');

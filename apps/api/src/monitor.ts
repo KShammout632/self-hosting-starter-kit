@@ -36,6 +36,7 @@ export interface StatusMonitor {
 
 interface ServiceState {
   status: ServiceSummary['status'];
+  installed: boolean;
   message: string | null;
   busy: BusyAction | null;
   lastFailure: string | null;
@@ -57,6 +58,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
       manifest.name,
       {
         status: 'offline',
+        installed: true,
         message: null,
         busy: null,
         lastFailure: null,
@@ -89,6 +91,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         lanPort: manifest.ports.lan,
         firstLoginTips: manifest.firstLoginTips,
         status: state.status,
+        installed: state.installed,
         message: state.message,
         busy: state.busy,
         errorCount: state.errorCount,
@@ -146,6 +149,7 @@ export function createStatusMonitor(options: MonitorOptions): StatusMonitor {
         lastFailure: state.lastFailure,
       });
       state.status = computed.status;
+      state.installed = result.state !== 'not_found';
       state.message = computed.message;
       state.credentialsPending = result.credentialsPending;
       state.update = result.update ?? null;

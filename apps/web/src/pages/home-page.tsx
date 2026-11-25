@@ -146,7 +146,7 @@ function ServiceCard({ service }: { service: ServiceSummary }) {
       ) : null}
 
       <div className="mt-auto flex flex-wrap gap-2">
-        {service.status === 'not_installed' ? (
+        {!service.installed ? (
           <Button disabled={busy} onClick={() => actions.run(service.name, 'install')}>
             Install
           </Button>
@@ -165,7 +165,7 @@ function ServiceCard({ service }: { service: ServiceSummary }) {
             </a>
           </Button>
         ) : null}
-        {service.status === 'offline' || service.status === 'error' ? (
+        {service.installed && (service.status === 'offline' || service.status === 'error') ? (
           <Button disabled={busy} onClick={() => actions.run(service.name, 'start')}>
             Start
           </Button>
@@ -179,7 +179,7 @@ function ServiceCard({ service }: { service: ServiceSummary }) {
             Stop
           </Button>
         ) : null}
-        {service.status !== 'not_installed' ? (
+        {service.installed ? (
           <Button variant="ghost" asChild>
             <Link to={`/services/${service.name}`}>Details and logs</Link>
           </Button>

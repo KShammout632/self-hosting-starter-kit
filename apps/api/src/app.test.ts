@@ -249,6 +249,20 @@ describe('services', () => {
     expect(body.services[0].status).toBe('error');
   });
 
+  it('still offers install after a failed start on a service that is not installed', async () => {
+    const t = await make();
+    const login = await setupAndLogin(t);
+    t.agent.serviceState = 'not_found';
+    t.agent.failNext = new AgentRequestError('not_installed', 'This service is not installed yet.');
+    await post(t, '/api/services/jellyfin/start', {}, login.headers);
+    await vi.waitFor(() => expect(t.monitor.snapshot().services[0]?.busy).toBeNull());
+    expect(t.monitor.snapshot().services[0]).toMatchObject({
+      status: 'error',
+      installed: false,
+      message: 'This service is not installed yet.',
+    });
+  });
+
   it('returns 404 for services that are not in the catalog', async () => {
     const t = await make();
     const login = await setupAndLogin(t);
