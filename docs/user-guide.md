@@ -22,7 +22,7 @@ You need at least 4 GB of memory and 20 GB free on the system disk. With all fou
 Sign in on the server (or over SSH) and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KShammout632/self-hosting-starting-kit/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/KShammout632/self-hosting-starter-kit/main/install.sh -o install.sh
 less install.sh
 sudo bash install.sh
 ```
