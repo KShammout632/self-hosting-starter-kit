@@ -105,6 +105,11 @@ Template for each entry:
 - Next:
 -->
 
+### 2026-11-25: 0.9.1 install button fix
+- Built: service status now carries `installed` (from the agent's container state), so a failed install or start no longer hides Install. Before, any status except `not_installed` counted as installed, and a failed attempt shows as `error`. Used by the Home and service pages. Version 0.9.1 and `docs/releases/v0.9.1.md`. New API test and updated Playwright mocks.
+- Not tested / needs the owner to check: lint, type check, format and unit tests pass; Playwright and a real server were not run. After the tag, check the dashboard offers the update to a 0.9.0 server, and find out why the first Nextcloud install failed.
+- Next: M6c hardware testing on an Intel N100 mini PC.
+
 ### 2026-11-24: M6b Security review and first pre-release
 - Built: (1) Security review of the agent, `install.sh`, `uninstall.sh` and `deploy/`, written up in `docs/security-review.md`. Fixed:
   - SR-1, root writing through symlinks in `/var/lib/selfhost`, which the dashboard owns. The agent's file writes use a random temporary name with `O_EXCL`, `selfhost reset-password` does the same with `fchown`, and `install.sh` and `apply-update.sh` build the file in a root-only `mktemp -d` folder and `mv` it into place.

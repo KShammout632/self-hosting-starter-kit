@@ -11,7 +11,7 @@
 # RAM and disk checks, because CI machines are smaller than the hardware the kit targets.
 set -euo pipefail
 
-KIT_VERSION="0.9.0"
+KIT_VERSION="0.9.1"
 NODE_VERSION="22.23.3"
 # Pinned here rather than read from nodejs.org, which also serves the download it would be checking.
 NODE_SHA256="df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de"

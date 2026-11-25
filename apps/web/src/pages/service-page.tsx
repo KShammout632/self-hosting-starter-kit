@@ -106,7 +106,7 @@ export function ServicePage() {
 
   const busy = service.busy !== null;
   const running = isRunning(service.status);
-  const installed = service.status !== 'not_installed';
+  const installed = service.installed;
 
   return (
     <div className="space-y-6">

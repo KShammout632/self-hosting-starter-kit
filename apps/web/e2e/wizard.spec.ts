@@ -9,7 +9,7 @@ const fresh = () =>
       reauthRequired: false,
       wizardComplete: false,
     },
-    service: jellyfin({ status: 'not_installed' }),
+    service: jellyfin({ status: 'not_installed', installed: false }),
     storage: newStorage([systemDisk()]),
   });
 
@@ -17,7 +17,7 @@ test.describe('setup wizard', () => {
   test('a new server walks through every step and lands on the home page', async ({ page }) => {
     const state = newState({
       session: { state: 'setup_required' },
-      service: jellyfin({ status: 'not_installed' }),
+      service: jellyfin({ status: 'not_installed', installed: false }),
       storage: newStorage([systemDisk()]),
     });
     await mockApi(page, state);
