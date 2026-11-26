@@ -21,7 +21,7 @@ import { AgentRequestError, type AgentClient } from './agent-client';
 import type { AuditLog } from './audit';
 import { REAUTH_AFTER_MS } from './auth';
 
-export const RELEASE_REPO = 'KShammout632/self-hosting-starter-kit';
+export const RELEASE_REPO = 'imtinkering/self-hosting-starter-kit';
 const DAY_MS = 24 * 60 * 60_000;
 const RETRY_AFTER_FAILURE_MS = 60 * 60_000;
 const MANUAL_CHECK_GAP_MS = 30_000;

@@ -22,7 +22,7 @@ The kit is one open-source repo that turns a fresh Ubuntu Server 24.04 machine i
 
 | Area | Decision | Why |
 | --- | --- | --- |
-| Repo | [KShammout632/self-hosting-starter-kit](https://github.com/KShammout632/self-hosting-starter-kit) | Project home |
+| Repo | [imtinkering/self-hosting-starter-kit](https://github.com/imtinkering/self-hosting-starter-kit) | Project home |
 | License | GPL | Keeps the kit and its forks open source |
 | OS | Ubuntu Server 24.04 LTS | Most beginner documentation, support until 2029 |
 | Hardware | x86-64 mini PC or old PC; Intel integrated graphics used when present, no discrete GPU support | Quick Sync helps Jellyfin transcoding at no extra setup cost |
@@ -130,7 +130,7 @@ The installer is a single idempotent bash script: running it twice is safe, and 
 **How users run it**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KShammout632/self-hosting-starter-kit/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/imtinkering/self-hosting-starter-kit/main/install.sh -o install.sh
 less install.sh   # optional: read it first
 sudo bash install.sh
 ```
